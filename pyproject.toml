@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "podcastbrief"
+version = "0.1.0"
+description = "Modular podcast-to-morning-brief pipeline (Gemma 4 E4B, Whisper, WeasyPrint)"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "click>=8.1",
+    "httpx>=0.27",
+    "feedparser>=6.0",
+    "python-telegram-bot>=21.0",
+    "ollama>=0.4",
+    "jinja2>=3.1",
+    "Pillow>=10.0",
+    "rank-bm25>=0.2.2",
+    "apscheduler>=3.10",
+    "python-frontmatter>=1.1",
+    "tenacity>=8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "ruff>=0.4",
+]
+weasyprint = ["weasyprint>=62.0"]
+
+[project.scripts]
+podcastbrief = "podcastbrief.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["podcastbrief*"]
+
+[tool.setuptools.package-data]
+"podcastbrief.briefing" = ["templates/*.html", "templates/*.css", "templates/assets/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

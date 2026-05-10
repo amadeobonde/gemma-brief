@@ -1,0 +1,32 @@
+# Supporting services for podcastbrief: faster-whisper (transcription) and
+# Gotenberg (HTML → PDF). Ollama runs natively on the host so the model has
+# access to all available RAM (Gemma 4 E4B needs ~10 GB).
+#
+#   docker compose up -d
+#
+# After this is up, set in your .env:
+#   WHISPER_URL=http://localhost:9000
+#   GOTENBERG_URL=http://localhost:3000
+
+services:
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: podcastbrief-whisper
+    restart: unless-stopped
+    ports:
+      - "9000:8000"
+    volumes:
+      - whisper-models:/root/.cache/huggingface
+    environment:
+      WHISPER__MODEL: Systran/faster-whisper-base.en
+      WHISPER__INFERENCE_DEVICE: cpu
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: podcastbrief-gotenberg
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
+volumes:
+  whisper-models:

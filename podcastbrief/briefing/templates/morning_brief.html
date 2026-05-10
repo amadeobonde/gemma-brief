@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ render.show_name }} — {{ render.episode_title }}</title>
+<style>{{ css }}</style>
+</head>
+<body style="--accent: {{ accent }};">
+
+<header class="hero">
+  {% if hero_data_uri %}
+  <div class="hero-img" style="background-image: url('{{ hero_data_uri }}');"></div>
+  <div class="hero-fade"></div>
+  {% endif %}
+  <div class="hero-overlay">
+    <div class="kicker">THE DAILY POD BRIEF · {{ render.generated_at }}</div>
+    <h1 class="headline">{{ b.headline }}</h1>
+    <div class="meta">
+      <strong>{{ render.show_name }}</strong> · {{ render.episode_title }}
+      <span class="dot">·</span> {{ render.runtime }}
+    </div>
+    {% if b.hosts or b.guests %}
+    <div class="people">
+      {% if b.hosts %}<span class="role">Hosts</span> {{ b.hosts | join(', ') }}{% endif %}
+      {% if b.hosts and b.guests %}<span class="sep">·</span>{% endif %}
+      {% if b.guests %}<span class="role">Guests</span> {{ b.guests | join(', ') }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</header>
+
+<main>
+
+  <section class="tldr">
+    <h2>TL;DR</h2>
+    <p>{{ b.tldr }}</p>
+  </section>
+
+  {% if b.thesis %}
+  <section class="thesis">
+    <h2>The Thesis</h2>
+    <p>{{ b.thesis }}</p>
+  </section>
+  {% endif %}
+
+  {% if b.why_it_matters %}
+  <section class="why">
+    <h2>Why It Matters</h2>
+    <ul>
+      {% for bullet in b.why_it_matters %}
+      <li>{{ bullet }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if b.pull_quotes %}
+  <section class="quotes">
+    <h2>Key Quotes</h2>
+    <div class="quote-grid">
+      {% for q in b.pull_quotes %}
+      <blockquote class="quote-card">
+        <p class="quote-text">{{ q.text }}</p>
+        <footer class="quote-attr">
+          <span class="speaker">— {{ q.speaker }}</span>
+          {% if q.timestamp %}<span class="ts">· {{ q.timestamp }}</span>{% endif %}
+        </footer>
+        {% if q.context %}<div class="quote-context">{{ q.context }}</div>{% endif %}
+      </blockquote>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if b.by_the_numbers %}
+  <section class="numbers">
+    <h2>By The Numbers</h2>
+    <div class="stat-grid">
+      {% for d in b.by_the_numbers %}
+      <div class="stat-card">
+        <div class="stat-figure">{{ d.stat }}</div>
+        <div class="stat-label">{{ d.label }}</div>
+        {% if d.why_relevant %}<div class="stat-note">{{ d.why_relevant }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if b.predictions %}
+  <section class="predictions">
+    <h2>Predictions</h2>
+    <ul class="arrow-list">
+      {% for p in b.predictions %}<li>{{ p }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if b.counterpoints %}
+  <section class="counterpoints">
+    <h2>Counterpoints &amp; Tensions</h2>
+    <ul class="arrow-list">
+      {% for c in b.counterpoints %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if b.resources_mentioned %}
+  <section class="resources">
+    <h2>Resources Mentioned</h2>
+    <ul class="resource-list">
+      {% for r in b.resources_mentioned %}
+      <li>
+        <span class="kind kind-{{ r.kind }}">{{ kind_icon(r.kind) }} {{ r.kind }}</span>
+        <strong>{{ r.name }}</strong>
+        {% if r.note %}<span class="note">— {{ r.note }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if b.action_items %}
+  <section class="actions">
+    <h2>Do Something With This</h2>
+    <ul class="check-list">
+      {% for a in b.action_items %}<li>{{ a }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if render.suggestions or b.go_deeper %}
+  <section class="go-deeper">
+    <h2>Go Deeper</h2>
+    {% if render.suggestions %}
+    <h3>Similar episodes</h3>
+    <ol class="suggest-list">
+      {% for s in render.suggestions %}
+      <li><a href="{{ s.url }}">{{ s.title }}</a>{% if s.show %} <span class="show">— {{ s.show }}</span>{% endif %}</li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% if b.go_deeper %}
+    <h3>Suggested searches</h3>
+    <ul class="search-list">
+      {% for q in b.go_deeper %}<li>{{ q }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if b.topics %}
+  <div class="topic-row">
+    {% for t in b.topics %}<span class="topic-chip">#{{ t }}</span>{% endfor %}
+  </div>
+  {% endif %}
+
+</main>
+
+<footer class="page-footer">
+  {% if render.spotify_url %}<a class="spotify-link" href="{{ render.spotify_url }}">Listen on Spotify ↗</a>{% endif %}
+  <span class="generated">Generated {{ render.generated_at }} · Gemma 4 E4B</span>
+</footer>
+
+</body>
+</html>

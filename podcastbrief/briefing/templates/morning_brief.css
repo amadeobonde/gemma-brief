@@ -1,0 +1,362 @@
+@page {
+  size: A4;
+  margin: 0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: "Helvetica", "Arial", sans-serif;
+  color: #1a1a2e;
+  line-height: 1.55;
+  font-size: 11.5pt;
+  margin: 0;
+  padding: 0;
+}
+
+main {
+  padding: 24px 36px 8px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+main h2 {
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.tldr p,
+.thesis p {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.resource-list li,
+.arrow-list li,
+.check-list li {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+h1, h2, h3 {
+  font-family: "Georgia", "Times New Roman", serif;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  color: var(--accent);
+  font-size: 14pt;
+  margin: 24px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 4px;
+}
+
+h3 {
+  font-size: 11pt;
+  color: #444;
+  margin: 12px 0 4px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* HERO */
+.hero {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--accent) 0%, #1a1a2e 100%);
+}
+.hero-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: saturate(1.05);
+}
+.hero-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.85) 100%);
+}
+.hero-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 28px 36px;
+  color: #fff;
+}
+.kicker {
+  font-size: 9pt;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-bottom: 6px;
+}
+.headline {
+  font-size: 26pt;
+  line-height: 1.15;
+  margin: 0 0 8px;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.meta {
+  font-size: 11pt;
+  opacity: 0.92;
+}
+.meta .dot { opacity: 0.5; margin: 0 4px; }
+.people {
+  font-size: 10pt;
+  margin-top: 6px;
+  opacity: 0.85;
+}
+.role {
+  text-transform: uppercase;
+  font-size: 8.5pt;
+  letter-spacing: 0.12em;
+  background: rgba(255,255,255,0.18);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+}
+.sep { margin: 0 8px; opacity: 0.5; }
+
+/* TLDR */
+.tldr p {
+  font-size: 13pt;
+  line-height: 1.5;
+  font-weight: 500;
+  margin: 0;
+  padding: 14px 16px;
+  background: #f6f7fb;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+}
+
+/* THESIS */
+.thesis p {
+  font-style: italic;
+  color: #333;
+  margin: 0;
+  padding: 4px 0;
+}
+
+/* WHY */
+.why ul {
+  padding-left: 20px;
+  margin: 0;
+}
+.why li {
+  margin-bottom: 6px;
+  padding-left: 4px;
+}
+
+/* QUOTES */
+.quote-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.quote-card {
+  margin: 0;
+  padding: 16px 18px 12px;
+  background: #fafbff;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  position: relative;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.quote-card::before {
+  content: "\201C";
+  position: absolute;
+  left: 8px;
+  top: -2px;
+  font-family: Georgia, serif;
+  font-size: 38pt;
+  color: var(--accent);
+  opacity: 0.25;
+  line-height: 1;
+}
+.quote-text {
+  font-family: Georgia, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  margin: 0 0 6px 22px;
+  color: #1a1a2e;
+}
+.quote-attr {
+  margin-left: 22px;
+  font-size: 9.5pt;
+  color: #555;
+}
+.quote-attr .speaker { font-weight: 600; }
+.quote-attr .ts {
+  font-family: "Menlo", "Courier New", monospace;
+  color: var(--accent);
+  margin-left: 4px;
+}
+.quote-context {
+  margin: 6px 0 0 22px;
+  font-size: 9pt;
+  color: #888;
+  font-style: italic;
+}
+
+/* NUMBERS */
+.stat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.stat-card {
+  flex: 1 1 30%;
+  min-width: 140px;
+  padding: 14px;
+  background: #fff;
+  border: 1.5px solid var(--accent);
+  border-radius: 6px;
+  text-align: center;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.stat-figure {
+  font-family: Georgia, serif;
+  font-size: 22pt;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 9.5pt;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.stat-note {
+  font-size: 8.5pt;
+  color: #777;
+  line-height: 1.3;
+}
+
+/* PRED / COUNTER */
+.arrow-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.arrow-list li {
+  position: relative;
+  padding-left: 22px;
+  margin-bottom: 6px;
+}
+.arrow-list li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* RESOURCES */
+.resource-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.resource-list li {
+  padding: 6px 0;
+  border-bottom: 1px dashed #eee;
+  font-size: 10pt;
+}
+.kind {
+  display: inline-block;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: #f0f0f7;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  color: #555;
+}
+.resource-list .note {
+  color: #777;
+  margin-left: 4px;
+}
+
+/* ACTIONS */
+.check-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.check-list li {
+  padding: 4px 0 4px 24px;
+  position: relative;
+}
+.check-list li::before {
+  content: "☐";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 13pt;
+}
+
+/* GO DEEPER */
+.suggest-list {
+  padding-left: 22px;
+  margin: 0;
+}
+.suggest-list li { margin-bottom: 4px; font-size: 10pt; }
+.suggest-list .show { color: #888; }
+.suggest-list a { color: var(--accent); text-decoration: none; }
+.search-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.search-list li {
+  display: inline-block;
+  background: #f5f5fa;
+  border: 1px solid #e0e0ea;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 9.5pt;
+  margin: 2px 4px 2px 0;
+  color: #555;
+}
+
+/* TOPIC CHIPS */
+.topic-row {
+  margin: 18px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+.topic-chip {
+  display: inline-block;
+  font-size: 9pt;
+  color: var(--accent);
+  margin-right: 8px;
+  font-weight: 600;
+}
+
+/* FOOTER */
+.page-footer {
+  padding: 12px 36px 24px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9pt;
+  color: #888;
+  max-width: 720px;
+  margin: 12px auto 0;
+}
+.spotify-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+.generated { font-family: "Menlo", monospace; font-size: 8pt; }

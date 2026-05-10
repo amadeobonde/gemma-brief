@@ -1,0 +1,31 @@
+# Secrets — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Project runtime artifacts
+podcast_notes/
+briefs/
+.transcript_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Plans / scratch
+plans/
