@@ -67,6 +67,15 @@ pyproject.toml
 .env.example
 ```
 
+## Tested on
+
+The pipeline is developed and run 24/7 on:
+
+- **Mac mini (Mac16,10, 2024)** — Apple M4, 10 cores (4P + 6E), **16 GB unified memory**
+- **macOS 15.6** (Sequoia)
+
+That's the minimum we'd recommend — Gemma 4 E4B needs ~10 GB just for the model, plus KV cache for a 32K context window, plus headroom for everything else (Whisper, Gotenberg, the bot, the OS). On 8 GB you'll need to drop to `gemma4:e2b`.
+
 ## Requirements
 
 - **Python 3.11+** (we ship for 3.11 — install via [uv](https://docs.astral.sh/uv/) if your system Python is older)
@@ -179,9 +188,52 @@ podcastbrief test-brief ./tests/fixtures/sample.mp3 \
   --out ./test_brief.pdf
 ```
 
-## Cron / launchd / systemd
+## Run as a system service (macOS launchd) — recommended for Mac mini
 
-If you don't want `serve` always running, schedule the CLI directly:
+This is how it runs on the test Mac mini: `podcastbrief serve` is supervised by **launchd** as a LaunchAgent so it auto-starts on user login and **auto-restarts if the process or the machine ever crashes**.
+
+```bash
+./scripts/install-launchd.sh
+```
+
+That script:
+1. Creates `~/Library/LaunchAgents/com.podcastbrief.serve.plist` from the template at `scripts/com.podcastbrief.serve.plist`, substituting the project's absolute path.
+2. Bootstraps it into your `gui/$UID` domain.
+3. Kickstarts it immediately.
+
+Properties of the agent:
+- `RunAtLoad = true` → starts on every user login
+- `KeepAlive = true` → respawns on any exit (including crashes, panics, oom-kills)
+- `ThrottleInterval = 30` → minimum 30 s between restarts so a bug can't burn CPU in a tight loop
+- `ProcessType = Background` → low priority, won't interfere with foreground apps
+- stdout/stderr → `./logs/podcastbrief.{out,err}.log`
+
+**For the Mac mini to come back up cleanly after a power loss or kernel panic**, also enable in macOS **System Settings → General → Login Items & Extensions**:
+- Auto-login on boot for the user that owns this checkout (System Settings → Users & Groups → Automatic login as)
+- "Start up automatically after a power failure" (System Settings → Energy)
+- "Restart automatically if the computer freezes" (older macOS) / Wake-on-LAN if you want remote recovery
+
+With those toggles + `KeepAlive`, the service is up at all times.
+
+### Operator commands
+
+```bash
+# Status
+launchctl print gui/$UID/com.podcastbrief.serve | grep -E "state|pid|last exit"
+
+# Force restart
+launchctl kickstart -k gui/$UID/com.podcastbrief.serve
+
+# Tail logs
+tail -f logs/podcastbrief.err.log
+
+# Uninstall
+./scripts/install-launchd.sh uninstall
+```
+
+### Alternative: cron / systemd
+
+If you don't want the long-running `serve`, schedule the discrete CLIs:
 
 ```cron
 0 2 * * *  cd /path/to/podcastbrief && /path/to/.venv/bin/podcastbrief run-daily
