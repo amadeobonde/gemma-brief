@@ -18,6 +18,7 @@ dist/
 podcast_notes/
 briefs/
 .transcript_cache/
+logs/
 
 # OS / editor
 .DS_Store
