@@ -228,6 +228,7 @@ class Pipeline:
                 "date": audio_ref.pub_date or "",
                 "spotify": ep.spotify_url,
                 "episode_id": ep.episode_id,
+                "language": brief.language,
                 "processed": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 "topics": brief.topics,
             },

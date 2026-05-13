@@ -109,9 +109,10 @@ def ground_enrichment(
         return enrichment
 
     user_msg = _shape_input(brief, enrichment)
+    from podcastbrief.briefing.extractor import language_directive
     try:
         result = llm.json_complete(
-            system=_SYSTEM,
+            system=_SYSTEM + language_directive(getattr(brief, "language", "en")),
             user=user_msg,
             schema=_Grounding,
             example=_EXAMPLE,

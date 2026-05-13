@@ -72,6 +72,31 @@ def _bound_transcript(text: str, *, max_chars: int = MAX_TRANSCRIPT_CHARS) -> st
     return f"{head}\n\n[... middle of transcript truncated for length ...]\n\n{tail}"
 
 
+_LANG_NAMES = {
+    "en": "English", "es": "Spanish", "fr": "French", "de": "German",
+    "pt": "Portuguese", "it": "Italian", "nl": "Dutch", "ja": "Japanese",
+    "zh": "Chinese", "ko": "Korean", "ru": "Russian", "ar": "Arabic",
+    "hi": "Hindi", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
+    "id": "Indonesian", "vi": "Vietnamese", "uk": "Ukrainian", "el": "Greek",
+}
+
+
+def language_directive(lang_code: str) -> str:
+    """A one-line system-prompt addendum binding the model to the transcript's
+    language. Threaded through every Gemma 4 call in the pipeline so non-English
+    episodes get non-English briefs."""
+    code = (lang_code or "en").split("-")[0].lower()
+    name = _LANG_NAMES.get(code, code.upper())
+    if code == "en":
+        return ""
+    return (
+        f"\n\nLANGUAGE: The transcript is in {name}. Respond ENTIRELY in {name}: "
+        f"all field values, section content, quote context, headlines, and "
+        f"annotations. Do not switch back to English. Speaker labels like "
+        f"'Host' / 'Guest' should also be the {name} equivalents if natural."
+    )
+
+
 def extract_structure(
     *,
     llm: LLM,
@@ -82,13 +107,15 @@ def extract_structure(
 ) -> EpisodeStructure:
     transcript_text = _bound_transcript(transcript.with_timestamps())
     log.info("Transcript chars sent to model: %d", len(transcript_text))
+    lang = (transcript.language or "en").split("-")[0].lower()
+    system = SYSTEM_EXTRACT + language_directive(lang)
     user = (
         f"SHOW: {show_name}\n"
         f"EPISODE: {episode_title}\n\n"
         f"TRANSCRIPT (with timestamps):\n{transcript_text}"
     )
     structure = llm.json_complete(
-        system=SYSTEM_EXTRACT,
+        system=system,
         user=user,
         schema=EpisodeStructure,
         max_retries=1,
@@ -97,7 +124,7 @@ def extract_structure(
     if artwork_png:
         try:
             caption = llm.complete(
-                system="You are a concise visual describer.",
+                system="You are a concise visual describer." + language_directive(lang),
                 user=VISION_PROMPT,
                 images=[artwork_png],
                 temperature=0.3,

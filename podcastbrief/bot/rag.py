@@ -76,6 +76,26 @@ class RagBot:
         self.index = ObsidianIndex(base_dir=notes_dir)
         self._user_memory: dict[str, _UserMemory] = {}
 
+    def _dominant_language(self) -> str:
+        """Pick a single language to bind replies to. Reads the most recent
+        note's frontmatter; falls back to English."""
+        try:
+            recent = self.index.all_entries()
+            if not recent:
+                return "en"
+            import frontmatter
+            from pathlib import Path
+            for entry in recent[:5]:
+                path = Path(self.index.base_dir) / f"{entry.file_stem}.md"
+                if path.exists():
+                    post = frontmatter.load(str(path))
+                    lang = str((post.metadata or {}).get("language") or "").strip()
+                    if lang:
+                        return lang.split("-")[0].lower()
+        except Exception:
+            pass
+        return "en"
+
     def answer(
         self,
         *,
@@ -98,15 +118,18 @@ class RagBot:
             f"USER QUESTION:\n{question}"
         )
 
+        from podcastbrief.briefing.extractor import language_directive
+        lang = self._dominant_language()
+        directive = language_directive(lang)
         if mode == "voice":
-            system_prompt = SYSTEM_RAG_VOICE
+            system_prompt = SYSTEM_RAG_VOICE + directive
             temperature = 0.6
             # Don't cap output tokens here — Gemma uses ~2 tokens per word and tight
             # caps just truncate mid-sentence. The system prompt enforces length,
             # and VoiceConfig.max_chars trims the TTS input as a hard safety net.
             num_predict = None
         else:
-            system_prompt = SYSTEM_RAG
+            system_prompt = SYSTEM_RAG + directive
             temperature = 0.4
             num_predict = None
 

@@ -78,9 +78,11 @@ def interrogate(
     structure: EpisodeStructure,
     transcript: Transcript,
 ) -> BriefFinal:
-    from podcastbrief.briefing.extractor import _bound_transcript
+    from podcastbrief.briefing.extractor import _bound_transcript, language_directive
 
     transcript_text = _bound_transcript(transcript.with_timestamps())
+    lang = (transcript.language or "en").split("-")[0].lower()
+    system_prompt = SYSTEM_INTERROGATE + language_directive(lang)
 
     # ---- 1. Quote selection ----
     pass1_quotes = sorted(
@@ -89,7 +91,7 @@ def interrogate(
     fallback_selection = QuoteSelection(pull_quotes=pass1_quotes[:5])
     selection = _try(
         lambda: llm.json_complete(
-            system=SYSTEM_INTERROGATE,
+            system=system_prompt,
             user=(
                 "From the candidate_quotes below, select the 3-5 STRONGEST by impact and "
                 "distinctness. Discard duplicates and weak ones. Each quote must be verbatim "
@@ -108,7 +110,7 @@ def interrogate(
     fallback_bullets = BulletReplacement(why_it_matters=structure.why_it_matters[:6])
     bullets = _try(
         lambda: llm.json_complete(
-            system=SYSTEM_INTERROGATE,
+            system=system_prompt,
             user=(
                 "Identify the WEAKEST bullet in the list below and replace it with a sharper, "
                 "more concrete claim grounded directly in the transcript. Keep all other bullets. "
@@ -127,7 +129,7 @@ def interrogate(
     fallback_data = DataPoints(by_the_numbers=structure.by_the_numbers[:5])
     data = _try(
         lambda: llm.json_complete(
-            system=SYSTEM_INTERROGATE,
+            system=system_prompt,
             user=(
                 "Re-scan the transcript for concrete numbers, percentages, dates, or dollar "
                 "figures missing from the list below. Add up to 2 more if supported. Return the "
@@ -146,7 +148,7 @@ def interrogate(
     fallback_res = ResourceList(resources_mentioned=structure.resources_mentioned)
     resources = _try(
         lambda: llm.json_complete(
-            system=SYSTEM_INTERROGATE,
+            system=system_prompt,
             user=(
                 "Scan the transcript for books, papers, tools, companies, or notable people "
                 "missing from the list below. Add them with kind and short note. Return the "
@@ -165,7 +167,7 @@ def interrogate(
     fallback_headline = Headline(headline=(structure.tldr or "Daily Brief")[:80])
     headline = _try(
         lambda: llm.json_complete(
-            system=SYSTEM_INTERROGATE,
+            system=system_prompt,
             user=(
                 "Write a punchy ≤12-word headline for this brief — NOT the episode title — that "
                 "captures the most newsworthy claim. Active voice, concrete.\n\n"
