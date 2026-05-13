@@ -31,8 +31,9 @@ def run_bot() -> None:
     voice = VoiceProcessor(
         transcriber=whisper,
         bot_token=s.telegram_bot_token,
-        config=VoiceConfig(),
+        config=VoiceConfig(voice=s.tts_voice, rate=s.tts_rate),
     )
+    log.info("TTS voice: %s @ %s wpm", s.tts_voice, s.tts_rate)
     log.info("Voice: OGG/Opus output %s", "ENABLED" if voice.has_opus else "DISABLED (m4a fallback)")
 
     from telegram import Update

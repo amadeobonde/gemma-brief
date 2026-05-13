@@ -22,6 +22,12 @@ class Settings(BaseSettings):
 
     gotenberg_url: str = "http://localhost:3000"
 
+    # Telegram voice-reply TTS. With Apple's premium neural voices downloaded
+    # (System Settings > Accessibility > Spoken Content > System Voice >
+    # Manage Voices), pick a name like "Ava (Premium)" or "Zoe (Premium)".
+    tts_voice: str = "Samantha"
+    tts_rate: int = 185
+
     notes_dir: Path = Field(default=Path("./podcast_notes"))
     pdf_out_dir: Path = Field(default=Path("./briefs"))
 
