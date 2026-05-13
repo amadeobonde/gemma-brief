@@ -24,10 +24,18 @@ class AudioRef:
 
 
 @dataclass
+class Word:
+    start: float
+    end: float
+    word: str
+
+
+@dataclass
 class TranscriptSegment:
     start: float
     end: float
     text: str
+    words: list[Word] = field(default_factory=list)
 
 
 @dataclass
@@ -35,6 +43,7 @@ class Transcript:
     text: str
     segments: list[TranscriptSegment] = field(default_factory=list)
     language: str | None = None
+    duration: float | None = None
 
     def with_timestamps(self) -> str:
         if not self.segments:
@@ -45,6 +54,10 @@ class Transcript:
             ss = int(s.start) % 60
             lines.append(f"[{mm:02d}:{ss:02d}] {s.text.strip()}")
         return "\n".join(lines)
+
+    @property
+    def has_word_timestamps(self) -> bool:
+        return any(seg.words for seg in self.segments)
 
 
 @dataclass

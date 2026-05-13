@@ -70,6 +70,7 @@ def run_bot_cmd() -> None:
     """Run the Telegram RAG bot (long-running)."""
     from podcastbrief.jobs.bot import run_bot
 
+    _startup_checks()
     run_bot()
 
 
@@ -140,6 +141,87 @@ def setup_cmd(env_path: Path) -> None:
     run_setup(env_path=env_path.resolve(), repo_root=repo_root)
 
 
+@cli.command("reindex-timestamps")
+def reindex_timestamps_cmd() -> None:
+    """Backfill word-level Whisper sidecars ({stem}_whisper.json) for the vault.
+
+    Idempotent — episodes already carrying word-level sidecars are skipped.
+    Requires the original audio in the audio store; run `redownload-audio` first
+    if any are missing.
+    """
+    from podcastbrief.jobs.maintenance import reindex_timestamps, format_results
+
+    s = load_settings()
+    logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
+    results = reindex_timestamps(s)
+    click.echo(format_results(results))
+
+
+@cli.command("redownload-audio")
+def redownload_audio_cmd() -> None:
+    """Re-fetch original episode audio for every vault note missing one.
+
+    Looks up each episode by its source (Spotify → iTunes RSS, YouTube → yt-dlp)
+    and stores the file under AUDIO_STORE_PATH. Idempotent — episodes that
+    already have a stored audio file are skipped.
+    """
+    from podcastbrief.jobs.maintenance import redownload_audio, format_results
+
+    s = load_settings()
+    logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
+    results = redownload_audio(s)
+    click.echo(format_results(results))
+
+
+@cli.command("add")
+@click.argument("target", required=False, default="")
+@click.option("--playlist", "playlist_url", default="", help="YouTube playlist URL to add.")
+@click.option("--rss", "rss_url", default="", help="Podcast RSS feed URL to add.")
+@click.option(
+    "--env-path",
+    type=click.Path(path_type=Path),
+    default=Path(".env"),
+    help="Path to .env file (default: ./.env).",
+)
+def add_cmd(target: str, playlist_url: str, rss_url: str, env_path: Path) -> None:
+    """Register a new content source (playlist or RSS feed) in .env.
+
+    Examples:
+      podcastbrief add --playlist https://www.youtube.com/playlist?list=...
+      podcastbrief add --rss https://feeds.simplecast.com/...
+
+    The URL is appended to the matching .env variable (YOUTUBE_PLAYLIST_URL
+    or RSS_PODCAST_FEEDS). Existing entries are deduplicated.
+    """
+    from podcastbrief.jobs.add_source import register_source
+
+    register_source(
+        env_path=env_path.resolve(),
+        playlist_url=playlist_url or (target if "youtube.com" in target else ""),
+        rss_url=rss_url or (target if (target and "youtube.com" not in target) else ""),
+    )
+
+
+def _startup_checks() -> None:
+    """Warn about missing optional dependencies needed by /debate."""
+    import shutil
+    missing = [b for b in ("ffmpeg", "ffprobe") if not shutil.which(b)]
+    if missing:
+        click.echo(
+            f"⚠️  Missing on PATH: {', '.join(missing)} — /debate audio stitching will fail. "
+            "Install the full ffmpeg suite: `brew install ffmpeg` (macOS) or `apt install ffmpeg` (Debian).",
+            err=True,
+        )
+    try:
+        import pydub  # noqa: F401
+    except ImportError:
+        click.echo(
+            "⚠️  pydub is not installed — /debate audio stitching will be disabled. "
+            "Install with: pip install 'pydub>=0.25.1'",
+            err=True,
+        )
+
+
 @cli.command("serve")
 def serve_cmd() -> None:
     """Run scheduler (daily 02:00, monthly 1st 03:00) + Telegram bot in one process."""
@@ -153,6 +235,7 @@ def serve_cmd() -> None:
 
     s = load_settings()
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
+    _startup_checks()
 
     sched = BackgroundScheduler()
     sched.add_job(run_daily, CronTrigger(hour=2, minute=0), id="daily")

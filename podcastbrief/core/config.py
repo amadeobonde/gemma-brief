@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     notes_dir: Path = Field(default=Path("./podcast_notes"))
     pdf_out_dir: Path = Field(default=Path("./briefs"))
 
+    # Persistent store of original episode audio (MP3/M4A/OGG). Required by the
+    # /debate audio-stitching feature; populated by every pipeline run and
+    # backfillable via `podcastbrief redownload-audio`.
+    audio_store_path: Path = Field(default=Path("./podcast_notes/audio_store"))
+
+    # /debate audio clip generation tunables.
+    clip_padding_seconds: float = 0.75
+    clip_silence_between_ms: int = 800
+    clip_target_dbfs: float = -18.0
+
     log_level: str = "INFO"
 
     @property

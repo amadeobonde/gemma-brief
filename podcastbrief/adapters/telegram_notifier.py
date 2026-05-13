@@ -46,3 +46,26 @@ class TelegramNotifier:
         if r.status_code >= 400:
             log.warning("Telegram sendDocument failed: %s %s", r.status_code, r.text)
             r.raise_for_status()
+
+    def send_voice(
+        self,
+        *,
+        chat_id: str,
+        data: bytes,
+        filename: str = "voice.ogg",
+        caption: str | None = None,
+    ) -> None:
+        """Send an OGG/Opus voice note. Telegram requires OGG container + Opus codec."""
+        files = {"voice": (filename, io.BytesIO(data), "audio/ogg")}
+        form = {"chat_id": chat_id}
+        if caption:
+            form["caption"] = caption[:1024]
+        r = httpx.post(
+            f"{self.base}/sendVoice",
+            data=form,
+            files=files,
+            timeout=120,
+        )
+        if r.status_code >= 400:
+            log.warning("Telegram sendVoice failed: %s %s", r.status_code, r.text)
+            r.raise_for_status()

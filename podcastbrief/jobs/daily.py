@@ -89,6 +89,7 @@ def build_pipeline(s: Settings) -> Pipeline:
         pdf_out_dir=s.pdf_out_dir,
         enrichers=enrichers,
         notes_dir=s.notes_dir,
+        audio_store_dir=s.audio_store_path,
         extra_source_bundles=_build_extra_bundles(s),
     )
 

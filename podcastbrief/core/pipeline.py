@@ -10,6 +10,11 @@ from podcastbrief.briefing.extractor import extract_structure
 from podcastbrief.briefing.interrogator import interrogate
 from podcastbrief.briefing.schemas import BriefFinal, RenderInput
 from podcastbrief.core.enrichment import run_enrichers, write_annotations_to_cache
+from podcastbrief.core.vault import (
+    find_existing_audio,
+    store_audio,
+    write_whisper_sidecar,
+)
 from podcastbrief.ports.enricher import Enricher, EnrichmentResult
 from podcastbrief.ports.feed import FeedResolver
 from podcastbrief.ports.images import ImageProvider
@@ -40,6 +45,7 @@ class Pipeline:
     pdf_out_dir: Path | None = None
     enrichers: list[Enricher] | None = None
     notes_dir: Path | None = None
+    audio_store_dir: Path | None = None
     # Additional (source, feed_resolver, audio_downloader) bundles.
     # Each tuple drives an independent content source (YouTube, RSS, Apple Music…)
     # that runs alongside the primary Spotify source in run_daily.
@@ -212,7 +218,32 @@ class Pipeline:
         log.info("Processing: %s — %s (force=%s)", ep.show_name, ep.name, force)
 
         audio_ref = _feed.find_audio(ep)
-        audio_bytes = _downloader(audio_ref)
+
+        # Audio retention: prefer the already-stored copy so we don't re-download
+        # on /run reprocessing; persist on first fetch for downstream features
+        # (debate clip stitching, etc.).
+        audio_bytes: bytes | None = None
+        stored_audio_path: Path | None = None
+        if self.audio_store_dir:
+            stored_audio_path = find_existing_audio(self.audio_store_dir, ep.episode_id)
+            if stored_audio_path and not force:
+                try:
+                    audio_bytes = stored_audio_path.read_bytes()
+                    log.info("Audio store hit: %s", stored_audio_path.name)
+                except Exception as e:
+                    log.warning("Audio store read failed (%s): %s", stored_audio_path, e)
+                    audio_bytes = None
+
+        if audio_bytes is None:
+            audio_bytes = _downloader(audio_ref)
+            if self.audio_store_dir:
+                try:
+                    stored_audio_path = store_audio(
+                        self.audio_store_dir, ep.episode_id, audio_bytes
+                    )
+                except Exception as e:
+                    log.warning("Audio store write failed: %s", e)
+
         transcript = self.transcriber.transcribe(
             audio_bytes, filename=f"{ep.episode_id}.mp3", force=force
         )
@@ -276,6 +307,19 @@ class Pipeline:
                 caption=f"{ep.show_name} — {audio_ref.title}",
             )
 
+        # Whisper sidecar (segments + word timestamps) — required by /debate.
+        if self.notes_dir:
+            try:
+                write_whisper_sidecar(
+                    notes_dir=self.notes_dir,
+                    file_stem=artifacts.file_stem,
+                    transcript=transcript,
+                    episode_id=ep.episode_id,
+                    audio_path=stored_audio_path,
+                )
+            except Exception as e:
+                log.warning("Whisper sidecar write failed: %s", e)
+
         self.notes.save(
             file_stem=artifacts.file_stem,
             body=artifacts.markdown,
@@ -288,6 +332,8 @@ class Pipeline:
                 "language": brief.language,
                 "processed": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 "topics": brief.topics,
+                "audio_path": str(stored_audio_path) if stored_audio_path else "",
+                "has_word_timestamps": bool(transcript.has_word_timestamps),
             },
         )
 

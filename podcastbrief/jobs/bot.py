@@ -105,6 +105,53 @@ def run_bot() -> None:
         from podcastbrief.bot.chart_tool import handle_chart_command
         await handle_chart_command(update, context, llm=pipe.llm, yahoo=cmd_ctx.yahoo)
 
+    # ---- /debate: audio voice-note compilation + Gemma analysis ----
+    async def on_debate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
+        msg = update.message
+        user_id = str(msg.from_user.id) if msg.from_user else "anon"
+        topic = " ".join(context.args or []).strip()
+        log.info("/debate from %s topic=%r", user_id, topic)
+        if not topic:
+            await msg.reply_text("Usage: /debate <topic>")
+            return
+
+        await msg.reply_text("🎙️ Finding debate clips across your vault…")
+
+        from podcastbrief.bot.debate_handler import run_debate
+        result = await asyncio.to_thread(
+            run_debate,
+            topic=topic,
+            llm=pipe.llm,
+            notes_dir=s.notes_dir,
+            audio_store_dir=s.audio_store_path,
+            target_dbfs=s.clip_target_dbfs,
+            padding_seconds=s.clip_padding_seconds,
+            silence_between_ms=s.clip_silence_between_ms,
+        )
+
+        if result.error or not result.ogg_bytes:
+            await msg.reply_text(result.error or "Couldn't build a debate compilation.")
+            return
+
+        try:
+            buf = _io.BytesIO(result.ogg_bytes)
+            buf.name = "debate.ogg"
+            await msg.reply_voice(voice=buf, caption=f"🎙️ Debate: {topic}"[:1024])
+        except Exception as e:
+            log.exception("Telegram voice send failed: %s", e)
+            await msg.reply_text(f"Built the voice note but couldn't send it: {e}")
+            return
+
+        if result.analysis_md:
+            try:
+                await msg.reply_text(result.analysis_md, parse_mode="Markdown")
+            except Exception:
+                await msg.reply_text(result.analysis_md)
+        if result.sources_md:
+            await msg.reply_text(result.sources_md)
+
     # ---- Generic command dispatcher ----
     def _make_handler(name: str):
         fn = COMMANDS[name]
@@ -262,6 +309,7 @@ def run_bot() -> None:
     # Custom-handled commands first.
     app.add_handler(CommandHandler("run", on_run_command))
     app.add_handler(CommandHandler("chart", on_chart_command))
+    app.add_handler(CommandHandler("debate", on_debate_command))
     # Generic command suite.
     for name in COMMANDS:
         app.add_handler(CommandHandler(name, _make_handler(name)))

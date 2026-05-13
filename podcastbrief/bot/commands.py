@@ -342,28 +342,37 @@ async def cmd_socratic(ctx: CommandContext, user_id: str, args: list[str]) -> li
     return [f"Socratic mode is {'ON' if state else 'OFF'}. Use /socratic on or /socratic off."]
 
 
-_DEBATE_SYS = """You steelman the strongest counterargument to a claim the host made in a podcast episode, grounded strictly in the provided vault context.
+async def cmd_moments(ctx: CommandContext, user_id: str, args: list[str]) -> list[str]:
+    """Text-only sibling of /debate — return contrasting transcript quotes."""
+    topic = " ".join(args).strip()
+    if not topic:
+        return ["Usage: /moments <topic>"]
+    from podcastbrief.adapters.gemma_debate_retriever import GemmaDebateRetriever
 
-Output:
-1. A 3-5 sentence counterargument that takes the opposing view seriously.
-2. A direct question prompting the user to rebut.
+    retriever = GemmaDebateRetriever(llm=ctx.llm)
+    try:
+        moments = await asyncio.to_thread(
+            retriever.find_topic_moments, topic, ctx.notes_dir, 4,
+        )
+    except Exception as e:
+        log.exception("/moments retrieval failed: %s", e)
+        return [f"/moments failed: {e}"]
 
-Do not hedge. Do not say "as an AI". No headers."""
+    if not moments:
+        return [
+            f"Not enough episodes cover '{topic}' yet. "
+            "Add more podcasts on this subject (or run `podcastbrief reindex-timestamps`) "
+            "and try again."
+        ]
 
-
-async def cmd_debate(ctx: CommandContext, user_id: str, args: list[str]) -> list[str]:
-    claim = " ".join(args).strip()
-    if not claim:
-        return ["Usage: /debate <a claim from the episode>"]
-    stem, lang, body = _latest_note_body(ctx.index)
-    if not body:
-        return ["No briefs yet."]
-    out = await _gemma_text(
-        ctx.llm,
-        system=_DEBATE_SYS + language_directive(lang),
-        user=f"VAULT CONTEXT ({stem}):\n{body}\n\nCLAIM TO STEELMAN AGAINST:\n{claim}",
-    )
-    return _wrap(out)
+    lines = [f"🔍 Moments on '{topic}':"]
+    for m in moments:
+        ts = f"{int(m.start_seconds // 60):02d}:{int(m.start_seconds % 60):02d}"
+        lines.append(
+            f"\n[[{m.episode_slug}]] — {m.host_name} @ `{ts}` ({m.stance})\n"
+            f"> {m.transcript_text.strip()}"
+        )
+    return _wrap("\n".join(lines))
 
 
 _CHALLENGE_SYS = """You identify the weakest argument in a podcast episode and prompt the user to defend or attack it.
@@ -594,7 +603,8 @@ ACTIVE RECALL
 
 SOCRATIC
 /socratic on|off — toggle follow-up questions on every answer
-/debate <claim> — Gemma 4 steelmans the strongest counter, asks you to rebut
+/debate <topic> — voice note: 3-4 contrasting host clips + analysis (audio)
+/moments <topic> — text-only: 3-4 contrasting host quotes from across the vault
 /challenge — pick the weakest episode argument, defend or attack
 /connect <topic> — how today's episode relates to older briefs
 
@@ -656,10 +666,10 @@ COMMANDS = {
     "flashcard": cmd_flashcard,
     "retention": cmd_retention,
     "socratic": cmd_socratic,
-    "debate": cmd_debate,
     "challenge": cmd_challenge,
     "connect": cmd_connect,
     "find": cmd_find,
+    "moments": cmd_moments,
     "numbers": cmd_numbers,
     "contradictions": cmd_contradictions,
     "define": cmd_define,
