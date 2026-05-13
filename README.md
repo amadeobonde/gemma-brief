@@ -48,6 +48,7 @@ last-24h episodes  ──► iTunes RSS lookup ──► download MP3
 - **Quotes carry timestamps.** Whisper returns segment timestamps; the model maps each chosen quote to `MM:SS` so you can jump back to it in the audio.
 - **Image-forward "morning brief" PDF.** Hero artwork (16:9 crop with show-color gradient), accent color sampled from the artwork via Pillow, large pull-quote cards with timestamps, stat cards, conditional sections (predictions, counterpoints, resources, action items, similar episodes).
 - **Obsidian-style RAG bot.** Markdown files are the source of truth. The bot reads frontmatter + full body content (transcript stripped for token budget), so "give me 3 quotes" actually returns 3 verbatim quotes. `INDEX.md` and `[[wikilinks]]` between briefs that share topics are auto-maintained.
+- **Voice in, voice out.** Send a voice message to the Telegram bot and it transcribes via the same Whisper container, runs the same RAG pipeline, and replies as a Telegram voice bubble (`say` → ffmpeg Opus encode → `sendVoice`).
 - **Ports & adapters.** Implement any of 9 `Protocol`s in `podcastbrief/ports/` to plug your own service in (Spotify → Apple Podcasts, Whisper → Deepgram, Ollama → OpenAI, Gotenberg → WeasyPrint, Telegram → Slack, etc.).
 
 ## Architecture
@@ -60,12 +61,25 @@ podcastbrief/
                iTunes artwork, Gotenberg, Telegram, FS notes, Spotify recommend)
   briefing/    schemas, extractor (pass 1), interrogator (pass 2), Jinja2 template
   bot/         Obsidian-style RAG (frontmatter + BM25, no vector DB)
+               + voice.py: Whisper STT + macOS say TTS + ffmpeg Opus encode
   jobs/        daily, cleanup, bot, auth-spotify CLI entry points
   cli.py       Click commands
 docker-compose.yml   Whisper + Gotenberg
 pyproject.toml
 .env.example
 ```
+
+## Voice messages
+
+Send a Telegram voice message to the bot and it will:
+
+1. Download the OGG/Opus from Telegram
+2. Transcribe it with the same `faster-whisper` container the daily pipeline uses
+3. Answer via the same RAG pipeline (full-body vault retrieval)
+4. Render the answer with macOS `say` (default voice: `Samantha`, 185 wpm), encode to OGG/Opus via ffmpeg at 32 kbps voip profile
+5. Reply with `sendVoice` so it shows up as a voice bubble
+
+To change the voice or rate, edit `VoiceConfig` defaults in `podcastbrief/bot/voice.py` (run `say -v '?'` for the full list — `Daniel`, `Karen`, `Alex`, etc.).
 
 ## Tested on
 
@@ -121,6 +135,22 @@ docker compose up -d
 This brings up:
 - `faster-whisper` on `http://localhost:9000` (transcription)
 - `gotenberg` on `http://localhost:3000` (HTML → PDF)
+
+### 4a. (Optional) Install ffmpeg for voice replies
+
+Telegram voice messages need OGG/Opus encoding. macOS doesn't ship ffmpeg; the
+quickest non-Homebrew route is the static arm64 build:
+
+```bash
+curl -fsSL https://www.osxexperts.net/ffmpeg71arm.zip -o /tmp/ffmpeg.zip
+unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
+cp /tmp/ffmpeg-extract/ffmpeg ~/.local/bin/ffmpeg
+chmod +x ~/.local/bin/ffmpeg
+xattr -d com.apple.quarantine ~/.local/bin/ffmpeg 2>/dev/null || true
+```
+
+Without ffmpeg the bot still answers voice messages, just as `sendAudio` M4A
+files instead of `sendVoice` bubbles.
 
 ### 5. Create a Spotify app
 
