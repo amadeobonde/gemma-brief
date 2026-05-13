@@ -3,6 +3,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 from podcastbrief.bot.index import IndexEntry, ObsidianIndex
 from podcastbrief.ports.llm import LLM
 
@@ -39,6 +40,25 @@ If genuinely no relevant content: "Don't see anything about that in the briefs y
 """
 
 
+SYSTEM_RAG_VOICE = """You are Jason, the user's podcast librarian, replying out loud on a phone call.
+
+Your reply will be SPOKEN ALOUD to the user via text-to-speech. Write the way a friend who actually listened to the podcast would casually answer. NOT a recap, NOT a structured summary, NOT a list.
+
+HARD RULES
+- 30 to 55 words. Two or three short sentences. No more.
+- One concrete answer. If they ask for "three quotes", pick the single most striking one and paraphrase it naturally in your own words — DO NOT list three.
+- Conversational tone: contractions, normal punctuation, complete sentences. No headings, no bullets, no numbered lists, no quotation marks around speaker names, no markdown, no [[wikilinks]], no timestamps like "24:18", no URLs.
+- Don't say "the brief" — say "this episode" or "they". Don't say "TL;DR".
+- If they greet ("hi", "thanks"), reply with one casual line. Don't recap anything.
+- If you don't have the info, say one short honest sentence ("I don't think that came up — what else?").
+
+EXAMPLES
+- User: "give me three quotes about compounding" → "There's a great line where the host basically says ninety-five percent of your account value ends up being pure growth, not what you put in. Pretty wild when you think about it."
+- User: "what are the five mistakes?" → "Quick version: don't wait to start investing, secure your basics first like insurance and debt, skip the trendy speculative bets, max out tax-advantaged accounts, and don't let emotions drive your moves."
+- User: "hi" → "Hey, what's up? Want me to pull anything from your latest brief?"
+"""
+
+
 @dataclass
 class _UserMemory:
     turns: deque = field(default_factory=lambda: deque(maxlen=10))
@@ -56,7 +76,13 @@ class RagBot:
         self.index = ObsidianIndex(base_dir=notes_dir)
         self._user_memory: dict[str, _UserMemory] = {}
 
-    def answer(self, *, user_id: str, question: str) -> str:
+    def answer(
+        self,
+        *,
+        user_id: str,
+        question: str,
+        mode: Literal["text", "voice"] = "text",
+    ) -> str:
         mem = self._user_memory.setdefault(user_id, _UserMemory())
         mem.turns.append(("user", question))
 
@@ -72,9 +98,24 @@ class RagBot:
             f"USER QUESTION:\n{question}"
         )
 
+        if mode == "voice":
+            system_prompt = SYSTEM_RAG_VOICE
+            temperature = 0.6
+            # Don't cap output tokens here — Gemma uses ~2 tokens per word and tight
+            # caps just truncate mid-sentence. The system prompt enforces length,
+            # and VoiceConfig.max_chars trims the TTS input as a hard safety net.
+            num_predict = None
+        else:
+            system_prompt = SYSTEM_RAG
+            temperature = 0.4
+            num_predict = None
+
         try:
             answer = self.llm.complete(
-                system=SYSTEM_RAG, user=user_msg, temperature=0.4
+                system=system_prompt,
+                user=user_msg,
+                temperature=temperature,
+                num_predict=num_predict,
             ).strip()
         except Exception as e:
             log.exception("RAG completion failed: %s", e)

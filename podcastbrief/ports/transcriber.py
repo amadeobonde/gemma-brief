@@ -4,4 +4,10 @@ from podcastbrief.core.models import Transcript
 
 
 class Transcriber(Protocol):
-    def transcribe(self, audio: bytes, *, filename: str = "audio.mp3") -> Transcript: ...
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        filename: str = "audio.mp3",
+        force: bool = False,
+    ) -> Transcript: ...

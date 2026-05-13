@@ -44,8 +44,17 @@ class Pipeline:
             self._notify_all("No new podcast episodes today.")
             return 0
 
+        already = self._existing_episode_ids()
+        fresh = [ep for ep in episodes if ep.episode_id not in already]
+        skipped = len(episodes) - len(fresh)
+        if skipped:
+            log.info("Dedup: skipping %d episode(s) already in the vault", skipped)
+        if not fresh:
+            self._notify_all("All recent episodes already processed. Nothing new today.")
+            return 0
+
         n_done = 0
-        for ep in episodes:
+        for ep in fresh:
             try:
                 self._process_episode(ep, dry_run=dry_run)
                 n_done += 1
@@ -58,12 +67,46 @@ class Pipeline:
             self._notify_all(f"All {n_done} podcast(s) summarized and sent out.")
         return n_done
 
-    def _process_episode(self, ep: Episode, *, dry_run: bool) -> None:
-        log.info("Processing: %s — %s", ep.show_name, ep.name)
+    def run_latest(self, *, dry_run: bool = False) -> Episode | None:
+        """Reprocess the most-recently-added episode in the playlist.
+
+        Always runs end-to-end (fresh download, fresh Whisper, fresh Gemma passes,
+        fresh PDF). If a note already exists for the same episode_id, it is
+        replaced rather than duplicated. Used by the Telegram /run command.
+        """
+        # Wide window so we get whatever's on the playlist regardless of age.
+        episodes = self.source.list_recent_episodes(hours=24 * 365)
+        if not episodes:
+            log.info("Playlist is empty; nothing to run.")
+            return None
+        latest = max(episodes, key=lambda e: e.added_at)
+        log.info("/run latest: %s — %s", latest.show_name, latest.name)
+        self._process_episode(latest, dry_run=dry_run, force=True)
+        return latest
+
+    def _existing_episode_ids(self) -> set[str]:
+        ids: set[str] = set()
+        for note in self.notes.list_recent(limit=500):
+            meta = note.metadata or {}
+            eid = str(meta.get("episode_id") or "").strip()
+            if not eid:
+                # Backward compat: older notes only stored the spotify URL.
+                # Extract the trailing episode ID segment.
+                spotify_url = str(meta.get("spotify") or "")
+                if "/episode/" in spotify_url:
+                    eid = spotify_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
+            if eid:
+                ids.add(eid)
+        return ids
+
+    def _process_episode(self, ep: Episode, *, dry_run: bool, force: bool = False) -> None:
+        log.info("Processing: %s — %s (force=%s)", ep.show_name, ep.name, force)
 
         audio_ref = self.feed.find_audio(ep)
         audio_bytes = self.audio_downloader(audio_ref)
-        transcript = self.transcriber.transcribe(audio_bytes, filename=f"{ep.episode_id}.mp3")
+        transcript = self.transcriber.transcribe(
+            audio_bytes, filename=f"{ep.episode_id}.mp3", force=force
+        )
         artwork = self.images.artwork(ep)
 
         structure = extract_structure(
@@ -120,6 +163,7 @@ class Pipeline:
                 "show": ep.show_name,
                 "date": audio_ref.pub_date or "",
                 "spotify": ep.spotify_url,
+                "episode_id": ep.episode_id,
                 "processed": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                 "topics": brief.topics,
             },

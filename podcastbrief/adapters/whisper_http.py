@@ -32,12 +32,20 @@ class WhisperHttpTranscriber:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def transcribe(self, audio: bytes, *, filename: str = "audio.mp3") -> Transcript:
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        filename: str = "audio.mp3",
+        force: bool = False,
+    ) -> Transcript:
         digest = hashlib.sha256(audio).hexdigest()
         cache_path = self.cache_dir / f"{digest}.json"
-        if cache_path.exists():
+        if cache_path.exists() and not force:
             log.info("Whisper: cache hit for %s (%s)", filename, digest[:12])
             return self._load_cache(cache_path)
+        if cache_path.exists() and force:
+            log.info("Whisper: cache bypassed (force=True) for %s", filename)
 
         url = f"{self.base_url}/v1/audio/transcriptions"
         files = {"file": (filename, audio, "audio/mpeg")}

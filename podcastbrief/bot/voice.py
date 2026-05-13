@@ -44,7 +44,10 @@ def _ffmpeg_path() -> str | None:
 class VoiceConfig:
     voice: str = "Samantha"          # macOS `say` voice (run `say -v '?'` to list)
     rate: int = 185                  # words per minute
-    max_chars: int = 1200            # truncate long answers before TTS
+    # Hard safety cap on TTS input. The voice-mode RAG prompt targets ~55 words
+    # (~330 chars at avg 6 chars/word), so 600 leaves headroom but won't let the
+    # bot ramble for a minute if the prompt is ignored.
+    max_chars: int = 600
     opus_bitrate_kbps: int = 32      # Telegram voice notes do well around 24-48k
 
 

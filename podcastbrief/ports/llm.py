@@ -13,6 +13,7 @@ class LLM(Protocol):
         user: str,
         images: Sequence[bytes] | None = None,
         temperature: float = 0.4,
+        num_predict: int | None = None,
     ) -> str: ...
 
     def json_complete(

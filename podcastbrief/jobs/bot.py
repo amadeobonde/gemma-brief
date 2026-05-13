@@ -1,10 +1,10 @@
 from __future__ import annotations
+import asyncio
 import logging
 from podcastbrief.core.config import load_settings
-from podcastbrief.adapters.ollama_gemma import OllamaGemma
-from podcastbrief.adapters.whisper_http import WhisperHttpTranscriber
 from podcastbrief.bot.rag import RagBot
 from podcastbrief.bot.voice import VoiceProcessor, VoiceConfig
+from podcastbrief.jobs.daily import build_pipeline
 
 log = logging.getLogger(__name__)
 
@@ -12,9 +12,10 @@ log = logging.getLogger(__name__)
 def run_bot() -> None:
     """Run the Telegram RAG bot via long-poll.
 
-    Handles both text and voice messages. Voice messages are transcribed via
-    the shared faster-whisper container, run through the same RAG pipeline,
-    then spoken back via macOS `say` + ffmpeg encoding to OGG/Opus.
+    Handles text, voice, and slash commands:
+      /run — reprocesses the most-recently-added playlist episode end-to-end
+              (fresh Whisper, fresh Gemma, fresh PDF), dedup-aware so the
+              vault never duplicates entries.
     """
     s = load_settings()
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
@@ -22,14 +23,12 @@ def run_bot() -> None:
     if not s.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
-    llm = OllamaGemma(host=s.ollama_host, model=s.llm_model)
-    rag = RagBot(llm=llm, notes_dir=s.notes_dir)
-
-    whisper = WhisperHttpTranscriber(
-        base_url=s.whisper_url, timeout_seconds=s.whisper_timeout_seconds
-    )
+    # Share one Pipeline across the bot so /run uses identical code paths to
+    # the daily scheduled run, and voice STT reuses the same Whisper instance.
+    pipe = build_pipeline(s)
+    rag = RagBot(llm=pipe.llm, notes_dir=s.notes_dir)
     voice = VoiceProcessor(
-        transcriber=whisper,
+        transcriber=pipe.transcriber,
         bot_token=s.telegram_bot_token,
         config=VoiceConfig(voice=s.tts_voice, rate=s.tts_rate),
     )
@@ -37,7 +36,13 @@ def run_bot() -> None:
     log.info("Voice: OGG/Opus output %s", "ENABLED" if voice.has_opus else "DISABLED (m4a fallback)")
 
     from telegram import Update
-    from telegram.ext import Application, MessageHandler, filters, ContextTypes
+    from telegram.ext import (
+        Application,
+        CommandHandler,
+        MessageHandler,
+        filters,
+        ContextTypes,
+    )
 
     async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.message or not update.message.text:
@@ -74,7 +79,7 @@ def run_bot() -> None:
             return
 
         try:
-            answer = rag.answer(user_id=user_id, question=question)
+            answer = rag.answer(user_id=user_id, question=question, mode="voice")
         except Exception as e:
             log.exception("RAG answer failed: %s", e)
             await msg.reply_text("Hit an issue answering that. Try again in a moment.")
@@ -100,8 +105,41 @@ def run_bot() -> None:
             log.exception("Telegram audio send failed: %s", e)
             await msg.reply_text(answer)
 
+    async def on_run_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Reprocess the most-recently-added playlist episode end-to-end."""
+        if not update.message:
+            return
+        msg = update.message
+        user_id = str(msg.from_user.id) if msg.from_user else "anon"
+        log.info("/run from %s", user_id)
+        await msg.reply_text(
+            "Running the latest playlist episode end-to-end. Fresh download, "
+            "fresh transcription, fresh PDF. This takes a few minutes — I'll send "
+            "the brief when it's ready."
+        )
+
+        # Run the blocking pipeline off the event loop so polling stays responsive.
+        def _do_run() -> None:
+            try:
+                ep = pipe.run_latest(dry_run=False)
+                if ep is None:
+                    asyncio.run_coroutine_threadsafe(
+                        msg.reply_text("Playlist is empty — nothing to run."),
+                        loop,
+                    )
+            except Exception as e:
+                log.exception("/run failed: %s", e)
+                asyncio.run_coroutine_threadsafe(
+                    msg.reply_text(f"/run failed: {e}"),
+                    loop,
+                )
+
+        loop = asyncio.get_event_loop()
+        await asyncio.to_thread(_do_run)
+
     app = Application.builder().token(s.telegram_bot_token).build()
+    app.add_handler(CommandHandler("run", on_run_command))
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    log.info("Telegram bot polling started (text + voice).")
+    log.info("Telegram bot polling started (text + voice + /run).")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
