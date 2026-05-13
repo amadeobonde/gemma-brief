@@ -1,8 +1,12 @@
 """Pydub-backed implementation of ClipExtractor.
 
 Used by the /debate command to build a single OGG voice note out of multiple
-host clips drawn from different episodes. Requires `ffmpeg` on PATH (pydub
-shells out to it for non-WAV formats).
+host clips drawn from different episodes. Requires `ffmpeg` + `ffprobe` on PATH
+(pydub shells out to them for media metadata and encode/decode).
+
+If the optional `static-ffmpeg` package is installed, this module will
+automatically prepend its bundled binaries to PATH at import time so users
+don't need a system-wide ffmpeg install.
 """
 from __future__ import annotations
 import logging
@@ -16,13 +20,30 @@ from podcastbrief.ports.clip_extractor import ClipMetadata
 log = logging.getLogger(__name__)
 
 
+def _activate_static_ffmpeg() -> None:
+    """If static-ffmpeg is installed, add its bundled binaries to PATH."""
+    try:
+        import static_ffmpeg  # type: ignore
+    except ImportError:
+        return
+    try:
+        static_ffmpeg.add_paths()
+    except Exception as e:
+        log.warning("static-ffmpeg activation failed: %s", e)
+
+
+# Activate eagerly at import time so any later `which('ffmpeg')` check sees it.
+_activate_static_ffmpeg()
+
+
 def _require_pydub():
     try:
         from pydub import AudioSegment  # type: ignore
     except ImportError as e:  # pragma: no cover — runtime guard
         raise RuntimeError(
             "pydub is required for the /debate feature. Install with: "
-            "pip install 'pydub>=0.25.1'  (also requires ffmpeg on PATH)"
+            "pip install 'pydub>=0.25.1'  (also requires ffmpeg on PATH; "
+            "install the optional `static-ffmpeg` package for a bundled fallback)"
         ) from e
     return AudioSegment
 
