@@ -44,12 +44,17 @@ last-24h episodes  ──► iTunes RSS lookup ──► download MP3
 
 ## Highlights
 
-- **Two-pass self-questioning summarizer.** Pass 1 over-extracts (8-12 candidate quotes with self-rated impact scores, numbers, resources, predictions). Pass 2 runs five focused follow-up calls — quote selection, bullet sharpening, data enrichment, resources sweep, headline. Dramatically better than single-shot prompts. Each sub-call has a fallback so a flaky LLM response can't kill the run.
+- **Three-pass agentic pipeline.** Pass 1 over-extracts a rich structured representation (8-12 candidate quotes with self-rated impact scores, numbers, predictions, plus standardized identifiers: Yahoo tickers, FRED series IDs, Wikipedia search terms, three open "socratic" questions the host never resolves). Pass 2 runs five focused follow-up calls to sharpen and select. Pass 3 grounds the brief against real-world data fetched by the enrichers — one sentence per chart/indicator/headline comparing what the host predicted vs what actually happened.
+- **Live enrichment** during every run: Yahoo Finance 30-day price charts per ticker, FRED 12-month sparklines per macro indicator, Wikipedia summaries for named entities, contemporaneous RSS headlines from Reuters/FT/BBC scored by keyword overlap with the episode. All cached to a JSON sidecar so reruns are fast.
 - **Quotes carry timestamps.** Whisper returns segment timestamps; the model maps each chosen quote to `MM:SS` so you can jump back to it in the audio.
-- **Image-forward "morning brief" PDF.** Hero artwork (16:9 crop with show-color gradient), accent color sampled from the artwork via Pillow, large pull-quote cards with timestamps, stat cards, conditional sections (predictions, counterpoints, resources, action items, similar episodes).
-- **Obsidian-style RAG bot.** Markdown files are the source of truth. The bot reads frontmatter + full body content (transcript stripped for token budget), so "give me 3 quotes" actually returns 3 verbatim quotes. `INDEX.md` and `[[wikilinks]]` between briefs that share topics are auto-maintained.
-- **Voice in, voice out.** Send a voice message to the Telegram bot and it transcribes via the same Whisper container, runs the same RAG pipeline, and replies as a Telegram voice bubble (`say` → ffmpeg Opus encode → `sendVoice`).
-- **Ports & adapters.** Implement any of 9 `Protocol`s in `podcastbrief/ports/` to plug your own service in (Spotify → Apple Podcasts, Whisper → Deepgram, Ollama → OpenAI, Gotenberg → WeasyPrint, Telegram → Slack, etc.).
+- **Image-forward "morning brief" PDF.** Hero artwork (16:9 crop), accent color sampled from the artwork via Pillow, large pull-quote cards with timestamps, stat cards, conditional sections for predictions, counterpoints, resources, action items, similar episodes, market snapshot, macro context, key concepts, and a "Reality Check" panel with the grounded RSS headlines.
+- **Obsidian-style RAG bot.** Markdown files are the source of truth — frontmatter + full body retrieval over BM25, no vector DB. `INDEX.md` and `[[wikilinks]]` auto-maintained.
+- **Voice in, voice out.** Send a Telegram voice message — Whisper STT → RagBot in voice mode → macOS `say` (premium neural voices like Ava) → ffmpeg Opus → Telegram voice bubble.
+- **17 Telegram commands:** /quiz, /flashcard, /retention, /socratic, /debate, /challenge, /connect, /find, /numbers, /contradictions, /define, /news, /chart, /macro, /topics, /gaps, /help — see `/help` in the bot or `podcastbrief/bot/commands.py`.
+- **On-demand ingest.** Send a YouTube URL or upload an audio/video file to the bot. ≤5 minutes → conversational voice reply. >5 minutes → full pipeline + PDF brief.
+- **Native Gemma 4 function calling** on the `/chart` command — Ollama tool-calling API, not text parsing. The model decides to call `get_price_chart`, we resolve it via Yahoo, then a second Gemma call annotates. See `podcastbrief/bot/chart_tool.py` for the reference implementation.
+- **Multi-language.** Whisper detects the transcript language; the directive flows through every Gemma prompt (extractor, interrogator, grounder, bot text + voice). Briefs in Spanish get answered in Spanish.
+- **Ports & adapters.** Implement any of 10 `Protocol`s in `podcastbrief/ports/` to plug your own service in (Spotify → Apple Podcasts, Whisper → Deepgram, Ollama → OpenAI, Gotenberg → WeasyPrint, Telegram → Slack, Enricher → your own data source, etc.).
 
 ## Architecture
 
@@ -69,6 +74,31 @@ pyproject.toml
 .env.example
 ```
 
+## Bot command reference
+
+| Command | What it does |
+| --- | --- |
+| `/help` | Print the full command list. |
+| `/run` | Reprocess the most-recently-added playlist episode end-to-end. Dedup-aware. |
+| `/quiz [topic]` | 3 MCQs from today's brief (or topic across the vault). Reply A/B/C/D. |
+| `/flashcard` | One true/false claim from today's brief with timestamp + explanation. |
+| `/retention` | Quiz history: accuracy, streak, weakest concepts. |
+| `/socratic on\|off` | Toggle a follow-up question on every reply. |
+| `/debate <claim>` | Gemma steelmans the counter, you rebut. |
+| `/challenge` | The weakest episode argument — defend or attack. |
+| `/connect <topic>` | Cross-episode synthesis: today vs vault history. |
+| `/find <concept>` | Every vault mention with timestamps and quotes. |
+| `/numbers` | All figures and stats from today's brief. |
+| `/contradictions` | Where today contradicts older briefs. |
+| `/define <concept>` | Wikipedia summary (live). |
+| `/news <topic>` | Top 3 RSS headlines for a topic, past 7 days. |
+| `/chart <ticker>` | Live Yahoo chart + Gemma annotation. Uses native Gemma 4 tool calling. |
+| `/macro <FRED_id>` | FRED sparkline + latest value, e.g. `/macro CPIAUCSL`. |
+| `/topics` | Recurring themes this week and this month. |
+| `/gaps` | Open questions hosts raised but didn't resolve. |
+
+Voice messages, audio uploads, and YouTube URLs are all accepted in addition to commands — see "On-demand ingest" below.
+
 ## Voice messages
 
 Send a Telegram voice message to the bot and it will:
@@ -79,7 +109,28 @@ Send a Telegram voice message to the bot and it will:
 4. Render the answer with macOS `say` (default voice: `Samantha`, 185 wpm), encode to OGG/Opus via ffmpeg at 32 kbps voip profile
 5. Reply with `sendVoice` so it shows up as a voice bubble
 
-To change the voice or rate, edit `VoiceConfig` defaults in `podcastbrief/bot/voice.py` (run `say -v '?'` for the full list — `Daniel`, `Karen`, `Alex`, etc.).
+To change the voice or rate, set `TTS_VOICE` and `TTS_RATE` in `.env`. For natural output, download Apple's premium neural voices via **System Settings → Accessibility → Spoken Content → System Voice → Manage Voices…**, then set `TTS_VOICE="Ava (Premium)"` (or Zoe / Evan / Allison / Siri Voice 1-5).
+
+## On-demand ingest
+
+Send any of these to the Telegram bot and it routes automatically:
+
+- **A voice message** → conversational voice-bubble reply (Whisper → RagBot voice mode → TTS).
+- **An audio or video file** (MP3, M4A, OGG, MP4, WAV) → duration-aware:
+  - **≤ 5 minutes** → conversational voice reply (treated as a question).
+  - **> 5 minutes** → full pipeline (Whisper, Pass 1/2/3, enrichment, PDF brief sent to the chat).
+- **A YouTube URL** → same duration-aware routing, audio pulled via `yt-dlp`.
+
+The full-pipeline path participates in vault dedup: re-uploading the same episode replaces the existing note rather than duplicating it.
+
+## Benchmarks
+
+```bash
+./.venv/bin/python scripts/benchmark.py            # last 10 briefs
+./.venv/bin/python scripts/benchmark.py --limit 5  # quick smoke test
+```
+
+Pits single-shot summarization against the existing two-pass architecture across the vault, scored by Gemma 4 on three 1-10 criteria (claim accuracy, quote relevance, actionability). Writes a markdown table to `./benchmarks/results.md`.
 
 ## Tested on
 
@@ -97,6 +148,18 @@ That's the minimum we'd recommend — Gemma 4 E4B needs ~10 GB just for the mode
 - **Docker** (for the Whisper + Gotenberg services)
 - **~16 GB RAM** to comfortably run Gemma 4 E4B (~10 GB model + KV cache)
 - A **Spotify Developer app** and a **Telegram bot token**
+
+## Quick install (macOS)
+
+One command does everything except the Spotify OAuth and Telegram bot creation steps:
+
+```bash
+./scripts/install.sh
+```
+
+That script installs uv, creates the Python 3.11 venv, installs the package, ensures Ollama is present and pulls `gemma4:e4b`, brings up the Whisper + Gotenberg docker compose services, drops standalone `ffmpeg` and `yt-dlp` binaries into `~/.local/bin`, copies `.env.example` to `.env` if missing, and prints the remaining setup steps. Idempotent — safe to re-run.
+
+If you'd rather do it by hand, the explicit steps follow.
 
 ## One-time setup
 
