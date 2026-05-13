@@ -203,21 +203,27 @@ def add_cmd(target: str, playlist_url: str, rss_url: str, env_path: Path) -> Non
 
 
 def _startup_checks() -> None:
-    """Warn about missing optional dependencies needed by /debate."""
+    """Warn about missing optional dependencies needed by /debate.
+
+    Imports `pydub_clip_extractor` first so its module-level static-ffmpeg
+    activation runs before we check PATH — otherwise we'd warn about
+    missing binaries that get added a moment later.
+    """
     import shutil
-    missing = [b for b in ("ffmpeg", "ffprobe") if not shutil.which(b)]
-    if missing:
-        click.echo(
-            f"⚠️  Missing on PATH: {', '.join(missing)} — /debate audio stitching will fail. "
-            "Install the full ffmpeg suite: `brew install ffmpeg` (macOS) or `apt install ffmpeg` (Debian).",
-            err=True,
-        )
     try:
-        import pydub  # noqa: F401
+        import podcastbrief.adapters.pydub_clip_extractor  # noqa: F401
     except ImportError:
         click.echo(
             "⚠️  pydub is not installed — /debate audio stitching will be disabled. "
             "Install with: pip install 'pydub>=0.25.1'",
+            err=True,
+        )
+        return
+    missing = [b for b in ("ffmpeg", "ffprobe") if not shutil.which(b)]
+    if missing:
+        click.echo(
+            f"⚠️  Missing on PATH: {', '.join(missing)} — /debate audio stitching will fail. "
+            "Install the full ffmpeg suite or `pip install '.[ffmpeg]'` for a bundled fallback.",
             err=True,
         )
 
