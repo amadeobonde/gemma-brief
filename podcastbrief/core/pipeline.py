@@ -9,6 +9,8 @@ from podcastbrief.core.models import BriefArtifacts, Episode
 from podcastbrief.briefing.extractor import extract_structure
 from podcastbrief.briefing.interrogator import interrogate
 from podcastbrief.briefing.schemas import BriefFinal, RenderInput
+from podcastbrief.core.enrichment import run_enrichers, write_annotations_to_cache
+from podcastbrief.ports.enricher import Enricher, EnrichmentResult
 from podcastbrief.ports.feed import FeedResolver
 from podcastbrief.ports.images import ImageProvider
 from podcastbrief.ports.llm import LLM
@@ -36,6 +38,8 @@ class Pipeline:
     chat_ids: list[str]
     audio_downloader: callable  # (AudioRef) -> bytes
     pdf_out_dir: Path | None = None
+    enrichers: list[Enricher] | None = None
+    notes_dir: Path | None = None
 
     def run_daily(self, *, hours: int = 24, dry_run: bool = False) -> int:
         episodes = self.source.list_recent_episodes(hours=hours)
@@ -84,6 +88,54 @@ class Pipeline:
         self._process_episode(latest, dry_run=dry_run, force=True)
         return latest
 
+    def _enrich_brief(
+        self,
+        *,
+        brief: BriefFinal,
+        episode_id: str,
+        episode_pub_date: str | None,
+        accent_hex: str,
+        force: bool,
+    ) -> EnrichmentResult:
+        if not self.enrichers or not self.notes_dir:
+            return EnrichmentResult()
+        try:
+            result = run_enrichers(
+                self.enrichers,
+                notes_dir=self.notes_dir,
+                episode_id=episode_id,
+                market_entities=brief.market_entities,
+                macro_indicators=brief.macro_indicators,
+                named_entities=brief.named_entities,
+                episode_pub_date=episode_pub_date,
+                accent_hex=accent_hex,
+                force=force,
+            )
+        except Exception as e:
+            log.warning("Enrichment failed: %s", e)
+            return EnrichmentResult()
+
+        # Pass 3 — Gemma 4 grounding annotations across modalities.
+        try:
+            from podcastbrief.briefing.grounder import ground_enrichment
+            result = ground_enrichment(llm=self.llm, brief=brief, enrichment=result)
+            write_annotations_to_cache(self.notes_dir, episode_id, result)
+        except Exception as e:
+            log.warning("Grounding annotations failed: %s", e)
+        return result
+
+    @staticmethod
+    def _accent_for(artwork: bytes | None) -> str:
+        """Best-effort dominant-color sampling for chart styling. Falls back to
+        the brand accent if Pillow isn't happy."""
+        if not artwork:
+            return "#6c63ff"
+        try:
+            from podcastbrief.adapters.gotenberg_renderer import _dominant_color_hex
+            return _dominant_color_hex(artwork)
+        except Exception:
+            return "#6c63ff"
+
     def _existing_episode_ids(self) -> set[str]:
         ids: set[str] = set()
         for note in self.notes.list_recent(limit=500):
@@ -117,9 +169,20 @@ class Pipeline:
             artwork_png=artwork,
         )
         brief = interrogate(llm=self.llm, structure=structure, transcript=transcript)
+        # Carry transcript language through to the rest of the pipeline.
+        brief.language = (transcript.language or "en").split("-")[0].lower()
 
         rec_query = " ".join(brief.topics[:3]) or " ".join(brief.go_deeper[:2]) or ep.show_name
         suggestions = self.recommender.similar(query=rec_query, limit=5)
+
+        # ---- Enrichment (item 2) + grounding annotations (item 3) ----
+        enrichment = self._enrich_brief(
+            brief=brief,
+            episode_id=ep.episode_id,
+            episode_pub_date=audio_ref.pub_date,
+            accent_hex=self._accent_for(artwork),
+            force=force,
+        )
 
         render_in = RenderInput(
             brief=brief,
@@ -133,6 +196,7 @@ class Pipeline:
                 {"title": s.title, "show": s.show, "url": s.url} for s in suggestions
             ],
             generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            enrichment=enrichment,
         )
 
         pdf_bytes = self.renderer.render(render_in)

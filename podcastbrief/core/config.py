@@ -28,6 +28,19 @@ class Settings(BaseSettings):
     tts_voice: str = "Samantha"
     tts_rate: int = 185
 
+    # Enrichment.
+    fred_api_key: str = ""
+    rss_news_feeds: str = (
+        "https://feeds.reuters.com/reuters/businessNews,"
+        "https://www.ft.com/rss/home,"
+        "https://feeds.bbci.co.uk/news/business/rss.xml,"
+        "https://feeds.bbci.co.uk/news/world/rss.xml"
+    )
+
+    @property
+    def rss_feed_list(self) -> list[str]:
+        return [u.strip() for u in self.rss_news_feeds.split(",") if u.strip()]
+
     notes_dir: Path = Field(default=Path("./podcast_notes"))
     pdf_out_dir: Path = Field(default=Path("./briefs"))
 

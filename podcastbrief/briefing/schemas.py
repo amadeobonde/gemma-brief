@@ -208,5 +208,6 @@ class RenderInput(BaseModel):
     artwork_png: bytes | None = None
     suggestions: list[dict] = Field(default_factory=list)
     generated_at: str
+    enrichment: object | None = None  # EnrichmentResult — opaque to pydantic
 
     model_config = {"arbitrary_types_allowed": True}

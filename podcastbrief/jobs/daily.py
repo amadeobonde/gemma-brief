@@ -11,6 +11,10 @@ from podcastbrief.adapters.gotenberg_renderer import GotenbergRenderer
 from podcastbrief.adapters.telegram_notifier import TelegramNotifier
 from podcastbrief.adapters.fs_notes import FilesystemNoteStore
 from podcastbrief.adapters.spotify_recommender import SpotifyEpisodeRecommender
+from podcastbrief.adapters.yahoo_enricher import YahooFinanceEnricher
+from podcastbrief.adapters.fred_enricher import FREDEnricher
+from podcastbrief.adapters.wikipedia_enricher import WikipediaEnricher
+from podcastbrief.adapters.rss_news_enricher import RSSNewsEnricher
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +26,12 @@ def build_pipeline(s: Settings) -> Pipeline:
         refresh_token=s.spotify_refresh_token,
         playlist_id=s.spotify_playlist_id,
     )
+    enrichers = [
+        YahooFinanceEnricher(),
+        FREDEnricher(api_key=s.fred_api_key),
+        WikipediaEnricher(),
+        RSSNewsEnricher(feeds=s.rss_feed_list),
+    ]
     return Pipeline(
         source=spotify,
         feed=ItunesRssFeed(),
@@ -37,6 +47,8 @@ def build_pipeline(s: Settings) -> Pipeline:
         chat_ids=s.chat_id_list,
         audio_downloader=download_audio,
         pdf_out_dir=s.pdf_out_dir,
+        enrichers=enrichers,
+        notes_dir=s.notes_dir,
     )
 
 
