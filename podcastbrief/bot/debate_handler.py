@@ -127,7 +127,13 @@ def _resolve_audio_paths(
     notes_dir: Path,
     audio_store_dir: Path,
 ) -> list[Path | None]:
-    """For each moment, locate the original audio file via the vault frontmatter."""
+    """For each moment, locate the original audio file via the vault frontmatter.
+
+    Handles both the new `episode_id` frontmatter and legacy notes that carry
+    only a `spotify` URL — derives the id from the URL when needed.
+    """
+    from podcastbrief.jobs.maintenance import _episode_id_from_meta
+
     out: list[Path | None] = []
     for m in moments:
         md_path = notes_dir / f"{m.episode_slug}.md"
@@ -137,7 +143,7 @@ def _resolve_audio_paths(
             try:
                 post = frontmatter.load(str(md_path))
                 meta = dict(post.metadata or {})
-                episode_id = str(meta.get("episode_id") or "")
+                episode_id = _episode_id_from_meta(meta)
                 stored_path = str(meta.get("audio_path") or "")
             except Exception as e:
                 log.warning("Couldn't read frontmatter for %s: %s", m.episode_slug, e)
