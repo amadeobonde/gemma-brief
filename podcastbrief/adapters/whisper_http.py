@@ -55,12 +55,13 @@ class WhisperHttpTranscriber:
         files = {"file": (filename, audio, "audio/mpeg")}
         # `timestamp_granularities[]` is the OpenAI-compatible param for word
         # timestamps; faster-whisper-server forwards it to faster-whisper's
-        # `word_timestamps=True`.
-        data = [
-            ("response_format", "verbose_json"),
-            ("timestamp_granularities[]", "word"),
-            ("timestamp_granularities[]", "segment"),
-        ]
+        # `word_timestamps=True`. httpx's multipart `data` needs a dict with a
+        # list value for repeated keys — a list of (k,v) tuples raises
+        # TypeError when the multipart encoder tries to join values.
+        data = {
+            "response_format": "verbose_json",
+            "timestamp_granularities[]": ["word", "segment"],
+        }
         log.info("Whisper: transcribing %d bytes -> %s (word timestamps)", len(audio), url)
         resp = httpx.post(url, files=files, data=data, timeout=self.timeout_seconds)
         resp.raise_for_status()
