@@ -1,9 +1,23 @@
 from __future__ import annotations
 import asyncio
+import io as _io
 import logging
+from pathlib import Path
+
 from podcastbrief.core.config import load_settings
+from podcastbrief.adapters.fred_enricher import FREDEnricher
+from podcastbrief.adapters.rss_news_enricher import RSSNewsEnricher
+from podcastbrief.adapters.wikipedia_enricher import WikipediaEnricher
+from podcastbrief.adapters.yahoo_enricher import YahooFinanceEnricher
+from podcastbrief.bot.commands import (
+    COMMANDS,
+    CommandContext,
+    handle_flashcard_answer,
+    handle_quiz_answer,
+)
+from podcastbrief.bot.index import ObsidianIndex
 from podcastbrief.bot.rag import RagBot
-from podcastbrief.bot.voice import VoiceProcessor, VoiceConfig
+from podcastbrief.bot.voice import VoiceConfig, VoiceProcessor
 from podcastbrief.jobs.daily import build_pipeline
 
 log = logging.getLogger(__name__)
@@ -12,10 +26,12 @@ log = logging.getLogger(__name__)
 def run_bot() -> None:
     """Run the Telegram RAG bot via long-poll.
 
-    Handles text, voice, and slash commands:
-      /run — reprocesses the most-recently-added playlist episode end-to-end
-              (fresh Whisper, fresh Gemma, fresh PDF), dedup-aware so the
-              vault never duplicates entries.
+    Handles:
+      - text messages (RagBot)
+      - voice messages (Whisper -> RagBot voice mode -> say -> ffmpeg -> sendVoice)
+      - 17 slash commands (see bot/commands.py)
+      - audio/video file uploads and YouTube URLs (bot/upload_router.py)
+      - /run (reprocess most-recent playlist episode)
     """
     s = load_settings()
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
@@ -23,8 +39,6 @@ def run_bot() -> None:
     if not s.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
-    # Share one Pipeline across the bot so /run uses identical code paths to
-    # the daily scheduled run, and voice STT reuses the same Whisper instance.
     pipe = build_pipeline(s)
     rag = RagBot(llm=pipe.llm, notes_dir=s.notes_dir)
     voice = VoiceProcessor(
@@ -33,28 +47,152 @@ def run_bot() -> None:
         config=VoiceConfig(voice=s.tts_voice, rate=s.tts_rate),
     )
     log.info("TTS voice: %s @ %s wpm", s.tts_voice, s.tts_rate)
-    log.info("Voice: OGG/Opus output %s", "ENABLED" if voice.has_opus else "DISABLED (m4a fallback)")
+    log.info("Voice: OGG/Opus %s", "ENABLED" if voice.has_opus else "DISABLED (m4a fallback)")
+
+    cmd_ctx = CommandContext(
+        llm=pipe.llm,
+        rag=rag,
+        index=ObsidianIndex(base_dir=Path(s.notes_dir)),
+        notes_dir=Path(s.notes_dir),
+        wiki=WikipediaEnricher(),
+        yahoo=YahooFinanceEnricher(),
+        fred=FREDEnricher(api_key=s.fred_api_key),
+        rss=RSSNewsEnricher(feeds=s.rss_feed_list),
+    )
 
     from telegram import Update
     from telegram.ext import (
         Application,
         CommandHandler,
+        ContextTypes,
         MessageHandler,
         filters,
-        ContextTypes,
     )
 
+    # ---- /run reused from previous commit ----
+    async def on_run_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
+        msg = update.message
+        user_id = str(msg.from_user.id) if msg.from_user else "anon"
+        log.info("/run from %s", user_id)
+        await msg.reply_text(
+            "Running the latest playlist episode end-to-end. Fresh download, "
+            "fresh transcription, fresh PDF. This takes a few minutes — I'll send "
+            "the brief when it's ready."
+        )
+        loop = asyncio.get_event_loop()
+
+        def _do_run() -> None:
+            try:
+                ep = pipe.run_latest(dry_run=False)
+                if ep is None:
+                    asyncio.run_coroutine_threadsafe(
+                        msg.reply_text("Playlist is empty — nothing to run."), loop,
+                    )
+            except Exception as e:
+                log.exception("/run failed: %s", e)
+                asyncio.run_coroutine_threadsafe(
+                    msg.reply_text(f"/run failed: {e}"), loop,
+                )
+
+        await asyncio.to_thread(_do_run)
+
+    # ---- /chart uses native Gemma 4 function calling (item 8) ----
+    async def on_chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
+        from podcastbrief.bot.chart_tool import handle_chart_command
+        await handle_chart_command(update, context, llm=pipe.llm, yahoo=cmd_ctx.yahoo)
+
+    # ---- Generic command dispatcher ----
+    def _make_handler(name: str):
+        fn = COMMANDS[name]
+
+        async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+            if not update.message:
+                return
+            msg = update.message
+            user_id = str(msg.from_user.id) if msg.from_user else "anon"
+            args = (context.args or [])
+            log.info("/%s from %s args=%s", name, user_id, args)
+            try:
+                results = await fn(cmd_ctx, user_id, args)
+            except Exception as e:
+                log.exception("Command /%s failed: %s", name, e)
+                await msg.reply_text(f"/{name} failed: {e}")
+                return
+            for r in results:
+                # Some commands (like /macro) return (text, chart_png) tuples.
+                if isinstance(r, tuple) and len(r) == 2 and isinstance(r[1], (bytes, bytearray)):
+                    text, png = r
+                    if png:
+                        buf = _io.BytesIO(png)
+                        buf.name = f"{name}.png"
+                        await msg.reply_photo(photo=buf, caption=text[:1024])
+                    else:
+                        await msg.reply_text(text)
+                else:
+                    await msg.reply_text(str(r))
+
+        return handler
+
+    # ---- Text + voice routing (existing) ----
     async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.message or not update.message.text:
             return
         user_id = str(update.message.from_user.id) if update.message.from_user else "anon"
         question = update.message.text.strip()
+
+        # Intercept quiz / flashcard answers first.
+        quiz_reply = handle_quiz_answer(cmd_ctx, user_id, question)
+        if quiz_reply is not None:
+            await update.message.reply_text(quiz_reply)
+            return
+        flash_reply = handle_flashcard_answer(cmd_ctx, user_id, question)
+        if flash_reply is not None:
+            await update.message.reply_text(flash_reply)
+            return
+
+        # Quick check: bare YouTube URL routes to the upload handler.
+        from podcastbrief.bot.upload_router import (
+            is_youtube_url,
+            handle_youtube_or_upload,
+        )
+        if is_youtube_url(question):
+            await handle_youtube_or_upload(
+                update, context,
+                url_or_file_id=question,
+                voice=voice,
+                rag=rag,
+                pipe=pipe,
+                source="youtube_url",
+            )
+            return
+
         log.info("RAG text from %s: %s", user_id, question[:80])
         try:
             answer = rag.answer(user_id=user_id, question=question)
         except Exception as e:
             log.exception("RAG answer failed: %s", e)
             answer = "Hit an issue. Try again in a moment."
+
+        # Socratic mode: append a follow-up question.
+        if cmd_ctx.socratic.get(user_id):
+            try:
+                followup = await asyncio.to_thread(
+                    pipe.llm.complete,
+                    system=(
+                        "Add ONE sharp follow-up question that pushes the user to "
+                        "think harder about the previous answer. Return ONLY the "
+                        "question, nothing else. No preamble."
+                    ),
+                    user=f"Previous answer:\n{answer}",
+                    temperature=0.6,
+                )
+                answer = f"{answer}\n\n— {followup.strip()}"
+            except Exception:
+                pass
         await update.message.reply_text(answer)
 
     async def on_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -63,7 +201,8 @@ def run_bot() -> None:
         msg = update.message
         user_id = str(msg.from_user.id) if msg.from_user else "anon"
         file_id = msg.voice.file_id
-        log.info("RAG voice from %s: file_id=%s duration=%ds", user_id, file_id, msg.voice.duration)
+        duration = msg.voice.duration or 0
+        log.info("RAG voice from %s: file_id=%s duration=%ds", user_id, file_id, duration)
 
         try:
             audio_bytes = voice.download_voice(file_id)
@@ -93,7 +232,6 @@ def run_bot() -> None:
             await msg.reply_text(answer)
             return
 
-        import io as _io
         buf = _io.BytesIO(audio_bytes)
         buf.name = fname
         try:
@@ -105,41 +243,32 @@ def run_bot() -> None:
             log.exception("Telegram audio send failed: %s", e)
             await msg.reply_text(answer)
 
-    async def on_run_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Reprocess the most-recently-added playlist episode end-to-end."""
-        if not update.message:
-            return
+    # ---- Audio/video file uploads (item 6) ----
+    async def on_audio_upload(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        from podcastbrief.bot.upload_router import handle_youtube_or_upload
         msg = update.message
-        user_id = str(msg.from_user.id) if msg.from_user else "anon"
-        log.info("/run from %s", user_id)
-        await msg.reply_text(
-            "Running the latest playlist episode end-to-end. Fresh download, "
-            "fresh transcription, fresh PDF. This takes a few minutes — I'll send "
-            "the brief when it's ready."
+        if not msg:
+            return
+        await handle_youtube_or_upload(
+            update, context,
+            url_or_file_id=None,
+            voice=voice,
+            rag=rag,
+            pipe=pipe,
+            source="upload",
         )
 
-        # Run the blocking pipeline off the event loop so polling stays responsive.
-        def _do_run() -> None:
-            try:
-                ep = pipe.run_latest(dry_run=False)
-                if ep is None:
-                    asyncio.run_coroutine_threadsafe(
-                        msg.reply_text("Playlist is empty — nothing to run."),
-                        loop,
-                    )
-            except Exception as e:
-                log.exception("/run failed: %s", e)
-                asyncio.run_coroutine_threadsafe(
-                    msg.reply_text(f"/run failed: {e}"),
-                    loop,
-                )
-
-        loop = asyncio.get_event_loop()
-        await asyncio.to_thread(_do_run)
-
     app = Application.builder().token(s.telegram_bot_token).build()
+    # Custom-handled commands first.
     app.add_handler(CommandHandler("run", on_run_command))
+    app.add_handler(CommandHandler("chart", on_chart_command))
+    # Generic command suite.
+    for name in COMMANDS:
+        app.add_handler(CommandHandler(name, _make_handler(name)))
+    # Audio / video / document uploads
+    app.add_handler(MessageHandler(filters.AUDIO | filters.VIDEO | filters.Document.AUDIO, on_audio_upload))
+    # Voice + text last so they don't shadow the commands.
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    log.info("Telegram bot polling started (text + voice + /run).")
+    log.info("Telegram bot polling started (text + voice + uploads + 17 commands + /run + /chart).")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
