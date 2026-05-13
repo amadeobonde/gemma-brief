@@ -19,6 +19,38 @@ Rules:
 - For by_the_numbers, only include figures actually stated in the transcript (numbers, percentages, dates, dollar amounts).
 - For resources_mentioned, capture every book/paper/tool/person/company/article cited.
 - Be concrete. No filler, no editorializing.
+
+ENRICHMENT IDENTIFIERS — return standardized symbols, NOT natural language:
+
+market_entities: Yahoo Finance-compatible tickers for any stocks, ETFs, indices,
+crypto, or forex mentioned. Examples:
+  S&P 500 -> "^GSPC" or "SPY"
+  Nasdaq 100 -> "^NDX" or "QQQ"
+  10-year Treasury yield -> "^TNX"
+  Apple -> "AAPL"
+  Bitcoin -> "BTC-USD"
+  Tesla -> "TSLA"
+Use exactly the Yahoo symbol; do not invent.
+
+macro_indicators: FRED series IDs for any macroeconomic concept discussed.
+Examples:
+  CPI / inflation -> "CPIAUCSL"
+  Unemployment rate -> "UNRATE"
+  10-year Treasury rate -> "DGS10"
+  Fed funds rate -> "FEDFUNDS"
+  Real GDP -> "GDPC1"
+  Nominal GDP -> "GDP"
+  Industrial production -> "INDPRO"
+  Retail sales -> "RSAFS"
+  M2 money supply -> "M2SL"
+Skip if the episode is not macro-relevant. Do not invent IDs.
+
+named_entities: People, events, companies, places, or concepts worth a Wikipedia
+lookup. Plain names: "Federal Reserve", "Cathie Wood", "2008 financial crisis",
+"index fund", "S&P 500". Max 8.
+
+socratic_hooks: Exactly 3 questions the host raises but never fully resolves in
+the episode. These are the open threads — not rhetorical, genuinely unresolved.
 """
 
 VISION_PROMPT = """Look at this podcast episode artwork. In ≤30 words, describe what it visually communicates about the show or this episode (mood, subject, characters, design choices). One sentence."""
