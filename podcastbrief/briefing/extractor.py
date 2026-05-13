@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from podcastbrief.core.models import Transcript
 from podcastbrief.ports.llm import LLM
-from podcastbrief.briefing.schemas import EpisodeStructure
+from podcastbrief.briefing.schemas import EpisodeStructure, Quote
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +97,63 @@ def language_directive(lang_code: str) -> str:
     )
 
 
+# Concrete shape example for Pass 1. Without this, json_complete falls back to
+# dumping the raw JSON schema in the system prompt, and on richer schemas like
+# EpisodeStructure Gemma 4 occasionally echoes the schema definition itself
+# back instead of producing an instance (returns {"$defs": ..., "title":
+# "EpisodeStructure"}). Showing one filled-in shape stops that drift cold —
+# same trick that fixed Pass 2.
+EPISODE_STRUCTURE_EXAMPLE = """{"tldr":"One-sentence summary of the episode.","thesis":"The central argument the host is making, in <=40 words.","why_it_matters":["First bullet, <=25 words.","Second bullet.","Third bullet."],"candidate_quotes":[{"text":"verbatim quote from the transcript","speaker":"Host Name","role":"host","timestamp":"24:18","context":"why this quote matters","impact_score":9},{"text":"another verbatim quote","speaker":"Guest Name","role":"guest","timestamp":"41:02","context":"why this matters","impact_score":8},{"text":"third quote","speaker":"Host","role":"host","timestamp":"58:47","context":"why","impact_score":7}],"by_the_numbers":[{"stat":"$42B","label":"market size","source":"speaker","why_relevant":"why this number matters"}],"hosts":["Wilfred Frost"],"guests":["Dan Niles"],"resources_mentioned":[{"name":"S&P 500","kind":"other","note":"benchmark"}],"predictions":["Forward-looking claim from the host."],"counterpoints":["Tension or counter-argument raised."],"action_items":["What a listener could do."],"topics":["ai","markets","macro"],"go_deeper":["search term 1","search term 2"],"market_entities":["SPY","^GSPC","NVDA"],"macro_indicators":["CPIAUCSL","DGS10"],"named_entities":["Federal Reserve","Dan Niles"],"socratic_hooks":["A question the host raises but does not answer.","Another open question.","A third unresolved question."]}"""
+
+
+def _minimal_fallback_structure(
+    transcript: Transcript, *, show_name: str, episode_title: str
+) -> EpisodeStructure:
+    """Last-resort EpisodeStructure built mechanically from the transcript when
+    Gemma 4 refuses to produce a parseable Pass-1 payload after retries. Lets
+    the pipeline still ship a PDF rather than dropping the episode entirely."""
+    head = (transcript.text or "").strip()
+    snippet = head[:280] + ("…" if len(head) > 280 else "")
+    # Pull a few segment texts as placeholder candidate quotes.
+    quotes: list[Quote] = []
+    for seg in (transcript.segments or [])[:3]:
+        text = (seg.text or "").strip()
+        if not text:
+            continue
+        mm = int(seg.start) // 60
+        ss = int(seg.start) % 60
+        quotes.append(
+            Quote(
+                text=text,
+                speaker="Speaker",
+                role="other",
+                timestamp=f"{mm:02d}:{ss:02d}",
+                context="",
+                impact_score=5,
+            )
+        )
+    while len(quotes) < 3:
+        quotes.append(
+            Quote(
+                text=snippet or "See transcript.",
+                speaker="Speaker",
+                role="other",
+                context="",
+                impact_score=4,
+            )
+        )
+    return EpisodeStructure(
+        tldr=snippet or f"Brief generation failed for {episode_title}; raw transcript available.",
+        thesis=f"Auto-generated fallback brief for {show_name} — {episode_title}.",
+        why_it_matters=[
+            "Pass-1 extraction did not return a valid structured payload.",
+            "Transcript is preserved in the markdown note for manual review.",
+            "Try /run to retry with a fresh Whisper pass and a warmer model.",
+        ],
+        candidate_quotes=quotes,
+    )
+
+
 def extract_structure(
     *,
     llm: LLM,
@@ -114,12 +171,23 @@ def extract_structure(
         f"EPISODE: {episode_title}\n\n"
         f"TRANSCRIPT (with timestamps):\n{transcript_text}"
     )
-    structure = llm.json_complete(
-        system=system,
-        user=user,
-        schema=EpisodeStructure,
-        max_retries=1,
-    )
+    try:
+        structure = llm.json_complete(
+            system=system,
+            user=user,
+            schema=EpisodeStructure,
+            example=EPISODE_STRUCTURE_EXAMPLE,
+            max_retries=2,
+        )
+    except Exception as e:
+        log.warning(
+            "Pass 1 (EpisodeStructure) failed after retries — falling back to "
+            "minimal structure so the pipeline still ships a PDF: %s",
+            e,
+        )
+        structure = _minimal_fallback_structure(
+            transcript, show_name=show_name, episode_title=episode_title
+        )
 
     if artwork_png:
         try:
