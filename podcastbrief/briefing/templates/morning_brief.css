@@ -241,6 +241,134 @@ h3 {
   line-height: 1.3;
 }
 
+/* MARKET SNAPSHOT */
+.market-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.market-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.market-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.market-head .ticker {
+  font-family: "Menlo", "Courier New", monospace;
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 11pt;
+}
+.market-head .price { font-weight: 600; font-size: 11pt; }
+.market-head .chg { font-size: 10pt; font-weight: 600; }
+.market-head .chg.up { color: #1f9b5b; }
+.market-head .chg.down { color: #c53030; }
+.market-chart { width: 100%; display: block; }
+.annotation {
+  font-size: 9.5pt;
+  color: #555;
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #eee;
+}
+
+/* MACRO CONTEXT */
+.macro-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.macro-card {
+  padding: 12px;
+  background: #fafbff;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.macro-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.macro-name { font-weight: 600; font-size: 10pt; }
+.macro-id {
+  font-family: "Menlo", "Courier New", monospace;
+  font-size: 8.5pt;
+  color: #999;
+}
+.macro-spark { width: 100%; display: block; margin: 4px 0; }
+.macro-latest {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.macro-latest .val {
+  font-family: Georgia, serif;
+  font-size: 14pt;
+  font-weight: 700;
+  color: var(--accent);
+}
+.macro-latest .date { font-size: 9pt; color: #888; }
+
+/* KEY CONCEPTS (Wikipedia) */
+.wiki-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.wiki-card {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.wiki-name { font-weight: 700; color: var(--accent); font-size: 11pt; }
+.wiki-summary { font-size: 10pt; line-height: 1.45; margin-top: 6px; color: #333; }
+.wiki-src { margin-top: 8px; font-size: 8pt; }
+.wiki-src a { color: #888; text-decoration: none; word-break: break-all; }
+
+/* REALITY CHECK (RSS news) */
+.news-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.news-card {
+  padding: 12px;
+  background: #fff;
+  border-left: 3px solid #e0e0ea;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.news-head { display: flex; gap: 10px; margin-bottom: 4px; }
+.news-source {
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  background: var(--accent);
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+.news-date { font-size: 9pt; color: #888; }
+.news-title { font-weight: 600; font-size: 11pt; line-height: 1.35; }
+.news-title a { color: #1a1a2e; text-decoration: none; }
+.news-summary { font-size: 9.5pt; color: #555; margin-top: 4px; line-height: 1.4; }
+
 /* PRED / COUNTER */
 .arrow-list {
   list-style: none;

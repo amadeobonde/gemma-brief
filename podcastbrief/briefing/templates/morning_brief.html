@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ language|default('en') }}">
 <head>
 <meta charset="UTF-8">
 <title>{{ render.show_name }} — {{ render.episode_title }}</title>
@@ -87,6 +87,49 @@
   </section>
   {% endif %}
 
+  {% if market %}
+  <section class="market">
+    <h2>Market Snapshot</h2>
+    <div class="market-grid">
+      {% for m in market %}
+      <div class="market-card">
+        <div class="market-head">
+          <span class="ticker">{{ m.ticker }}</span>
+          {% if m.current_price is not none %}<span class="price">${{ "%.2f"|format(m.current_price) }}</span>{% endif %}
+          {% if m.pct_change_30d is not none %}<span class="chg {% if m.pct_change_30d >= 0 %}up{% else %}down{% endif %}">{{ "%+.1f"|format(m.pct_change_30d) }}%</span>{% endif %}
+        </div>
+        {% if m.chart_uri %}<img class="market-chart" src="{{ m.chart_uri }}" alt="{{ m.ticker }} chart" />{% endif %}
+        {% if m.annotation %}<div class="annotation">{{ m.annotation }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if macro %}
+  <section class="macro">
+    <h2>Macro Context</h2>
+    <div class="macro-grid">
+      {% for s in macro %}
+      <div class="macro-card">
+        <div class="macro-head">
+          <span class="macro-name">{{ s.name }}</span>
+          <span class="macro-id">{{ s.series_id }}</span>
+        </div>
+        {% if s.chart_uri %}<img class="macro-spark" src="{{ s.chart_uri }}" alt="{{ s.series_id }} sparkline" />{% endif %}
+        {% if s.latest_value is not none %}
+        <div class="macro-latest">
+          <span class="val">{{ "%.2f"|format(s.latest_value) }}</span>
+          {% if s.latest_date %}<span class="date">as of {{ s.latest_date }}</span>{% endif %}
+        </div>
+        {% endif %}
+        {% if s.annotation %}<div class="annotation">{{ s.annotation }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if b.predictions %}
   <section class="predictions">
     <h2>Predictions</h2>
@@ -102,6 +145,40 @@
     <ul class="arrow-list">
       {% for c in b.counterpoints %}<li>{{ c }}</li>{% endfor %}
     </ul>
+  </section>
+  {% endif %}
+
+  {% if wiki %}
+  <section class="wiki">
+    <h2>Key Concepts</h2>
+    <div class="wiki-grid">
+      {% for w in wiki %}
+      <div class="wiki-card">
+        <div class="wiki-head"><span class="wiki-name">{{ w.name }}</span></div>
+        <div class="wiki-summary">{{ w.summary }}</div>
+        {% if w.url %}<div class="wiki-src"><a href="{{ w.url }}">{{ w.url }}</a></div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if news %}
+  <section class="news">
+    <h2>Reality Check</h2>
+    <div class="news-grid">
+      {% for n in news %}
+      <div class="news-card">
+        <div class="news-head">
+          <span class="news-source">{{ n.source }}</span>
+          {% if n.pub_date %}<span class="news-date">{{ n.pub_date }}</span>{% endif %}
+        </div>
+        <div class="news-title">{% if n.url %}<a href="{{ n.url }}">{{ n.title }}</a>{% else %}{{ n.title }}{% endif %}</div>
+        {% if n.summary %}<div class="news-summary">{{ n.summary }}</div>{% endif %}
+        {% if n.annotation %}<div class="annotation">{{ n.annotation }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
   </section>
   {% endif %}
 
