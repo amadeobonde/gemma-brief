@@ -587,6 +587,7 @@ SOCRATIC
 /connect <topic> — how today's episode relates to older briefs
 
 REFERENCE
+/explain <keyword> — pull the full audio clip + verbatim transcript where that topic was discussed
 /find <concept> — every vault mention with timestamps
 /numbers — all stats from today's brief
 /contradictions — points where today contradicts older briefs

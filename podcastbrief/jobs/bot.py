@@ -141,6 +141,67 @@ def run_bot() -> None:
         if result.sources_md:
             await msg.reply_text(result.sources_md)
 
+    # ---- /explain: pull full passage + audio clip for a keyword ----
+    async def on_explain_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message:
+            return
+        msg = update.message
+        user_id = str(msg.from_user.id) if msg.from_user else "anon"
+        query = " ".join(context.args or []).strip()
+        log.info("/explain from %s query=%r", user_id, query)
+        if not query:
+            await msg.reply_text("Usage: /explain <keyword or topic>  e.g. /explain google spark")
+            return
+
+        await msg.reply_text(f"🔍 Searching transcripts for '{query}'…")
+
+        from podcastbrief.bot.explain_handler import run_explain
+
+        result = await asyncio.to_thread(
+            run_explain,
+            query=query,
+            notes_dir=s.notes_dir,
+            audio_store_dir=s.audio_store_path,
+            target_dbfs=s.clip_target_dbfs,
+            padding_seconds=s.clip_padding_seconds,
+        )
+
+        if result.error:
+            await msg.reply_text(result.error)
+            return
+
+        def _fmt(sec: float) -> str:
+            s_ = max(0, int(sec))
+            h_, s_ = divmod(s_, 3600)
+            m_, s_ = divmod(s_, 60)
+            return f"{h_}:{m_:02d}:{s_:02d}" if h_ else f"{m_}:{s_:02d}"
+
+        start_ts = _fmt(result.start_seconds)
+        end_ts = _fmt(result.end_seconds)
+
+        # Send voice note first so the transcript flows underneath it.
+        if result.ogg_bytes:
+            try:
+                buf = _io.BytesIO(result.ogg_bytes)
+                buf.name = f"explain_{result.episode_slug}.ogg"
+                caption = f"[[{result.episode_slug}]]  {start_ts} → {end_ts}"[:1024]
+                await msg.reply_voice(voice=buf, caption=caption)
+            except Exception as e:
+                log.exception("/explain voice send failed: %s", e)
+
+        # Verbatim transcript text with header.
+        header = (
+            f"📝 *{result.episode_title}*\n"
+            f"`{start_ts}` → `{end_ts}`\n\n"
+        )
+        full_text = header + result.transcript_text
+        from podcastbrief.bot.commands import _wrap
+        for chunk in _wrap(full_text):
+            try:
+                await msg.reply_text(chunk, parse_mode="Markdown")
+            except Exception:
+                await msg.reply_text(chunk)
+
     # ---- Generic command dispatcher ----
     def _make_handler(name: str):
         fn = COMMANDS[name]
@@ -298,6 +359,7 @@ def run_bot() -> None:
     # Custom-handled commands first.
     app.add_handler(CommandHandler("run", on_run_command))
     app.add_handler(CommandHandler("debate", on_debate_command))
+    app.add_handler(CommandHandler("explain", on_explain_command))
     # Generic command suite.
     for name in COMMANDS:
         app.add_handler(CommandHandler(name, _make_handler(name)))
@@ -306,5 +368,5 @@ def run_bot() -> None:
     # Voice + text last so they don't shadow the commands.
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    log.info("Telegram bot polling started (text + voice + uploads + commands + /run + /debate).")
+    log.info("Telegram bot polling started (text + voice + uploads + commands + /run + /debate + /explain).")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
