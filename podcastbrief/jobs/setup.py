@@ -93,18 +93,18 @@ def _banner() -> None:
 # Each entry: (ollama_tag, display_name, disk_gb, ram_gb, note)
 GEMMA_MODELS: list[tuple[str, str, float, int, str]] = [
     # Gemma 4 — multimodal, vision-capable
-    ("gemma4:e2b",  "Gemma 4 E2B",  5.0,  7,  "Fastest · vision · fits 8 GB RAM"),
-    ("gemma4:e4b",  "Gemma 4 E4B",  9.6,  12, "Recommended · vision · 128K ctx"),
-    ("gemma4:12b",  "Gemma 4 12B",  13.0, 16, "Higher quality · vision · 128K ctx"),
-    ("gemma4:27b",  "Gemma 4 27B",  30.0, 35, "Max quality · vision · needs 32 GB+"),
+    ("gemma4:e2b",  "Gemma 4 E2B",  5.0,  7,  "Fastest · fits 8 GB RAM"),
+    ("gemma4:e4b",  "Gemma 4 E4B",  9.6,  12, "Best balance of speed + quality"),
+    ("gemma4:12b",  "Gemma 4 12B",  13.0, 16, "Higher quality"),
+    ("gemma4:27b",  "Gemma 4 27B",  30.0, 35, "Max quality · needs 32 GB+"),
     # Gemma 3 — text-only, strong reasoning
-    ("gemma3:4b",   "Gemma 3 4B",   3.3,  6,  "Lightweight · text-only · 128K ctx"),
-    ("gemma3:12b",  "Gemma 3 12B",  8.1,  12, "Balanced · text-only · 128K ctx"),
+    ("gemma3:4b",   "Gemma 3 4B",   3.3,  6,  "Lightweight · good for 6 GB RAM"),
+    ("gemma3:12b",  "Gemma 3 12B",  8.1,  12, "Balanced"),
     ("gemma3:27b",  "Gemma 3 27B",  17.0, 24, "Best text quality · needs 24 GB+"),
     # Gemma 2 — ultra lightweight
-    ("gemma2:2b",   "Gemma 2 2B",   1.7,  4,  "Ultra light · fits any device"),
-    ("gemma2:9b",   "Gemma 2 9B",   5.5,  8,  "Compact · good for 8 GB RAM"),
-    ("gemma2:27b",  "Gemma 2 27B",  16.0, 22, "Largest Gemma 2 · needs 24 GB+"),
+    ("gemma2:2b",   "Gemma 2 2B",   1.7,  4,  "Ultra-light · any device"),
+    ("gemma2:9b",   "Gemma 2 9B",   5.5,  8,  "Compact"),
+    ("gemma2:27b",  "Gemma 2 27B",  16.0, 22, "Needs 24 GB+"),
 ]
 
 # Context-window presets per model family — bigger ctx = more memory pressure.
@@ -162,57 +162,96 @@ def _pick_model(existing_model: str) -> str:
     if existing_model and existing_model != suggested:
         suggested = existing_model  # honour what's already in .env
 
+    # ── column widths (plain text, no ANSI) ──────────────────────────────
+    C_NUM   = 3   # "10"
+    C_MODEL = 13  # "Gemma 4 E4B"
+    C_DISK  = 7   # "30.0 GB"
+    C_RAM   = 6   # "35 GB"
+    # separator width = 2 (marker+space) + C_NUM + 2 + C_MODEL + 2 + C_DISK + 2 + C_RAM + 2 + notes
+    SEP = "─" * 56
+    BAR = click.style("  │  ", fg="cyan")
+
+    def _row(num: str, name: str, disk: str, ram_s: str, note: str,
+             *, highlight: bool = False, recommended: bool = False) -> str:
+        marker = click.style("▶ ", fg="cyan", bold=True) if recommended else "  "
+        plain = (
+            f"{num:>{C_NUM}}  {name:<{C_MODEL}}  {disk:>{C_DISK}}  {ram_s:>{C_RAM}}  {note}"
+        )
+        if highlight:
+            return BAR + marker + click.style(plain, bold=True)
+        return BAR + marker + plain
+
+    def _section(label: str) -> None:
+        click.echo(BAR)
+        click.echo(BAR + click.style(label, fg="bright_black"))
+
     click.echo()
     click.echo(click.style("  ┌─ Model Selection ", fg="cyan", bold=True) +
                click.style("─" * (W - 16), fg="cyan"))
     click.echo(click.style("  │", fg="cyan"))
-    if ram:
-        click.echo(click.style("  │  ", fg="cyan") +
-                   click.style(f"Detected RAM: {ram} GB", fg="bright_black"))
-    click.echo(click.style("  │", fg="cyan"))
 
-    # Print table header
-    click.echo(click.style("  │  ", fg="cyan") +
-               click.style(f"  {'#':<3}  {'Model':<18}  {'Disk':>6}  {'RAM':>5}  Notes", bold=True))
-    click.echo(click.style("  │  ", fg="cyan") +
-               "  " + "─" * 60)
+    if ram:
+        click.echo(BAR + click.style(f"Detected RAM: {ram} GB", fg="bright_black"))
+
+    # Header
+    click.echo(BAR)
+    click.echo(BAR + "  " +
+               click.style(
+                   f"{'#':>{C_NUM}}  {'Model':<{C_MODEL}}  {'Disk':>{C_DISK}}  "
+                   f"{'RAM':>{C_RAM}}  Notes",
+                   bold=True,
+               ))
+    click.echo(BAR + "  " + SEP)
 
     default_idx = 1
+    prev_family = ""
     for i, (tag, name, disk, rq, note) in enumerate(GEMMA_MODELS, start=1):
-        is_default = (tag == suggested)
-        marker = click.style("▶", fg="cyan", bold=True) if is_default else " "
-        row = (
-            f"  {i:<3}  {name:<18}  {disk:>4.1f} GB  {rq:>3} GB  {note}"
-        )
-        if is_default:
-            click.echo(click.style("  │  ", fg="cyan") + marker +
-                       click.style(row + "  ← recommended", bold=True))
+        family = tag.split(":")[0]  # gemma4 / gemma3 / gemma2
+
+        # Print a section divider when the family changes
+        if family != prev_family:
+            family_labels = {
+                "gemma4": "Gemma 4  —  vision + text  ·  128K context",
+                "gemma3": "Gemma 3  —  text-only  ·  128K context",
+                "gemma2": "Gemma 2  —  text-only  ·  8K context",
+            }
+            _section(family_labels.get(family, family))
+            prev_family = family
+
+        is_rec = (tag == suggested)
+        rec_note = note + "  ← recommended" if is_rec else note
+        click.echo(_row(
+            str(i),
+            name,
+            f"{disk:.1f} GB",
+            f"{rq} GB",
+            rec_note,
+            highlight=is_rec,
+            recommended=is_rec,
+        ))
+        if is_rec:
             default_idx = i
-        else:
-            click.echo(click.style("  │  ", fg="cyan") + marker + row)
 
     click.echo(click.style("  │", fg="cyan"))
 
     while True:
         raw = click.prompt(
-            click.style("  │  Select model number", fg="cyan"),
+            click.style("  │  Select number", fg="cyan"),
             default=str(default_idx),
-        )
-        raw = raw.strip()
-        # Allow entering either a number or a raw tag (e.g. "gemma4:e4b")
+        ).strip()
         if raw.isdigit():
             idx = int(raw)
             if 1 <= idx <= len(GEMMA_MODELS):
                 chosen = GEMMA_MODELS[idx - 1][0]
                 break
-            _warn(f"Enter a number between 1 and {len(GEMMA_MODELS)}, or type the model tag directly.")
+            _warn(f"Pick 1–{len(GEMMA_MODELS)}, or type a model tag like gemma4:e4b")
         elif ":" in raw:
             chosen = raw
             break
         else:
-            _warn("Enter a number from the list or a full Ollama model tag.")
+            _warn("Enter a number from the list, or a full Ollama tag (e.g. gemma4:e4b)")
 
-    _ok(f"Model set to  {click.style(chosen, bold=True)}")
+    _ok(f"Model → {click.style(chosen, bold=True)}")
     click.echo(click.style("  │", fg="cyan"))
     return chosen
 
