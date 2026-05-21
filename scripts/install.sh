@@ -9,7 +9,9 @@
 #   5. ffmpeg + yt-dlp binaries → ~/.local/bin
 #   6. .env from .env.example (if not present)
 
-set -euo pipefail
+# Note: intentionally NOT using set -o pipefail — third-party installers
+# (uv, Ollama) can exit non-zero on success in some environments.
+set -eo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -39,16 +41,29 @@ ok()   { printf "  ${GREEN}✓${RESET}  %s\n" "$*"; }
 warn() { printf "  ${YELLOW}!${RESET}  %s\n" "$*"; }
 err()  { printf "  ${RED}✗${RESET}  %s\n" "$*"; }
 
+# Safe version capture: avoids SIGPIPE issues with | head -1 under pipefail.
+ver() { "$@" 2>&1 | { read -r line; echo "$line"; } || true; }
+
 banner
 
 # ── 1. uv ─────────────────────────────────────────────────────────────────────
 step "Python toolchain (uv)"
 if ! command -v uv >/dev/null 2>&1; then
     printf "  Installing uv...\n"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    source "$HOME/.local/bin/env" 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+    # || true: uv's installer exits non-zero on first install in some envs
+    curl -LsSf https://astral.sh/uv/install.sh | sh || true
+    # Source the env file uv creates; fall back to manually extending PATH
+    # shellcheck disable=SC1091
+    source "$HOME/.local/bin/env" 2>/dev/null \
+        || source "$HOME/.cargo/env" 2>/dev/null \
+        || export PATH="$HOME/.local/bin:$PATH"
 fi
-ok "uv $(uv --version 2>&1 | head -1)"
+# Verify uv is now accessible
+if ! command -v uv >/dev/null 2>&1; then
+    err "uv still not found after install. Try opening a new terminal and re-running."
+    exit 1
+fi
+ok "uv $(ver uv --version)"
 
 # ── 2. venv + package ─────────────────────────────────────────────────────────
 step "Python 3.11 venv + gemma-brief"
@@ -58,7 +73,7 @@ if [ ! -x "$ROOT/.venv/bin/gemma-brief" ]; then
     printf "  Installing package...\n"
     uv pip install -e .
 fi
-ok "gemma-brief $($ROOT/.venv/bin/gemma-brief --version 2>&1 | head -1)"
+ok "gemma-brief $(ver "$ROOT/.venv/bin/gemma-brief" --version)"
 
 # ── 3. Ollama + model ─────────────────────────────────────────────────────────
 step "Ollama + Gemma 4 E4B"
@@ -70,10 +85,10 @@ if ! command -v ollama >/dev/null 2>&1; then
         exit 1
     else
         printf "  Installing Ollama (Linux)...\n"
-        curl -fsSL https://ollama.com/install.sh | sh
+        curl -fsSL https://ollama.com/install.sh | sh || true
     fi
 fi
-ok "Ollama $(ollama --version 2>&1 | head -1)"
+ok "Ollama $(ver ollama --version)"
 
 if ! ollama list 2>/dev/null | grep -q "^gemma4:e4b"; then
     printf "\n  ${YELLOW}Pulling gemma4:e4b (~9.6 GB, one-time download)...${RESET}\n"
@@ -94,9 +109,9 @@ if ! command -v docker >/dev/null 2>&1; then
     printf "  Then re-run this script.\n"
     exit 1
 fi
-ok "Docker $(docker --version 2>&1 | head -1)"
+ok "Docker $(ver docker --version)"
 
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "gemma-brief-whisper\|podcastbrief-whisper"; then
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "whisper"; then
     printf "  Starting Whisper + Gotenberg containers...\n"
     docker compose up -d
 fi
@@ -118,7 +133,7 @@ if [ ! -x "$LOCAL_BIN/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
         printf "  Install: brew install ffmpeg  OR  sudo apt install ffmpeg\n"
     fi
 else
-    ok "ffmpeg $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f1-3)"
+    ok "ffmpeg $(ver ffmpeg -version | cut -d' ' -f1-3)"
 fi
 
 # ── 6. yt-dlp ─────────────────────────────────────────────────────────────────
@@ -134,7 +149,7 @@ if [ ! -x "$LOCAL_BIN/yt-dlp" ] && ! command -v yt-dlp >/dev/null 2>&1; then
     fi
     chmod +x "$LOCAL_BIN/yt-dlp"
 fi
-ok "yt-dlp $(yt-dlp --version 2>&1 | head -1)"
+ok "yt-dlp $(ver yt-dlp --version)"
 
 # ── 7. .env ───────────────────────────────────────────────────────────────────
 step ".env"
