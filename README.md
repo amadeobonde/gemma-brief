@@ -6,7 +6,7 @@ Point it at any YouTube playlist — news channels, debate shows, lectures, podc
 Everything runs **fully on-device**. No OpenAI. No subscriptions. No data leaving your machine.  
 Works on **macOS · Linux · Windows (WSL 2)** and supports the **full Gemma 2 / 3 / 4 suite**.
 
-Built for the [DEV Gemma 4 Challenge](https://dev.to/challenges/gemma4).
+Built for the [DEV Gemma 4 Challenge](https://dev.to/challenges/google-gemma-2026-05-06).
 
 ---
 
