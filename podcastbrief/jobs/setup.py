@@ -11,6 +11,7 @@ Writes or updates .env in the current working directory.
 """
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -105,6 +106,27 @@ def _run(cmd: list[str], *, check: bool = True, timeout: int = 60) -> subprocess
 def _cmd_exists(name: str) -> bool:
     return shutil.which(name) is not None
 
+
+def _find_docker() -> str | None:
+    """Find the docker binary — checks PATH then known macOS Docker Desktop locations."""
+    found = shutil.which("docker")
+    if found:
+        return found
+    # Docker Desktop on macOS installs to several locations depending on version
+    candidates = [
+        os.path.expanduser("~/.docker/bin/docker"),
+        "/Applications/Docker.app/Contents/Resources/bin/docker",
+        "/usr/local/bin/docker",
+        "/opt/homebrew/bin/docker",
+    ]
+    for path in candidates:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            # Add its directory to PATH so `docker compose` also works
+            docker_dir = os.path.dirname(path)
+            os.environ["PATH"] = docker_dir + os.pathsep + os.environ.get("PATH", "")
+            return path
+    return None
+
 def _local_bin() -> Path:
     p = Path.home() / ".local" / "bin"
     p.mkdir(parents=True, exist_ok=True)
@@ -157,7 +179,8 @@ def _ensure_gemma(model: str) -> None:
 
 
 def _ensure_docker() -> bool:
-    if not _cmd_exists("docker"):
+    docker_bin = _find_docker()
+    if not docker_bin:
         if platform.system() == "Darwin":
             _err("Docker not found.")
             _info("Install Docker Desktop → https://www.docker.com/products/docker-desktop")
@@ -166,7 +189,9 @@ def _ensure_docker() -> bool:
             _info("Install Docker Engine → https://docs.docker.com/engine/install/")
         return False
     try:
-        v = _run(["docker", "--version"]).stdout.strip()
+        v = subprocess.run(
+            [docker_bin, "--version"], capture_output=True, text=True, timeout=10
+        ).stdout.strip()
         _ok(f"Docker  {v}")
     except Exception:
         _ok("Docker  found")

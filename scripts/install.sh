@@ -112,6 +112,25 @@ ok "gemma4:e4b ready"
 
 # ── 4. Docker + containers ────────────────────────────────────────────────────
 step "Docker (Whisper + Gotenberg)"
+# Docker Desktop on macOS puts its CLI in non-standard locations.
+# Walk known paths and symlink into LOCAL_BIN so `docker` resolves.
+if ! command -v docker >/dev/null 2>&1; then
+    for _docker_candidate in \
+        "$HOME/.docker/bin/docker" \
+        "/Applications/Docker.app/Contents/Resources/bin/docker" \
+        "/usr/local/bin/docker" \
+        "/opt/homebrew/bin/docker"
+    do
+        if [ -x "$_docker_candidate" ]; then
+            ln -sf "$_docker_candidate" "$LOCAL_BIN/docker"
+            # Also symlink docker compose plugin if present
+            _compose="${_docker_candidate%docker}docker-compose"
+            [ -x "$_compose" ] && ln -sf "$_compose" "$LOCAL_BIN/docker-compose" || true
+            break
+        fi
+    done
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
     err "Docker not found."
     if [ "$(uname)" = "Darwin" ]; then
