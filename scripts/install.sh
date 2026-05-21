@@ -18,10 +18,20 @@ cd "$ROOT"
 
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
-case ":$PATH:" in
-    *":$LOCAL_BIN:"*) ;;
-    *) export PATH="$LOCAL_BIN:$PATH" ;;
-esac
+
+# Extend PATH with all common tool locations before any checks
+for _p in \
+    "$LOCAL_BIN" \
+    "/usr/local/bin" \
+    "/opt/homebrew/bin" \
+    "/Applications/Docker.app/Contents/Resources/bin" \
+    "$HOME/.docker/bin"
+do
+    case ":$PATH:" in
+        *":$_p:"*) ;;
+        *) export PATH="$_p:$PATH" ;;
+    esac
+done
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 BOLD='\033[1m'; CYAN='\033[1;36m'; GREEN='\033[1;32m'
