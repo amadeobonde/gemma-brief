@@ -77,10 +77,10 @@ def _banner() -> None:
     _box_div()
     _box_mid()
     _box_mid("  What we'll configure:")
-    _box_mid("    1  Model selection (Gemma 2 · 3 · 4)")
-    _box_mid("    2  System dependencies (Ollama · Docker · yt-dlp)")
+    _box_mid("    1  Model selection  (Gemma 2 · 3 · 4)")
+    _box_mid("    2  System dependencies  (Ollama · Docker · yt-dlp)")
     _box_mid("    3  Telegram bot  (who receives the briefs)")
-    _box_mid("    4  YouTube playlists  (what to watch)")
+    _box_mid("    4  Sources + schedule  (playlists, feeds, brief time)")
     _box_mid()
     _box_bot()
     click.echo()
@@ -469,6 +469,7 @@ def _show_summary(
     telegram_chats: str,
     yt_playlists: str,
     rss_feeds: str,
+    brief_time: str = "02:00",
 ) -> None:
     click.echo()
     _box_top()
@@ -491,6 +492,7 @@ def _show_summary(
         n_rss = len([f for f in rss_feeds.split(",") if f.strip()])
         _row("RSS feeds", click.style(str(n_rss), bold=True))
     _row("Telegram", click.style(f"{n_chats} chat{'s' if n_chats != 1 else ''}", bold=True))
+    _row("Daily brief", click.style(f"{brief_time}  (server local time)", bold=True))
     _box_mid()
     _box_bot()
     click.echo()
@@ -498,8 +500,8 @@ def _show_summary(
     system = platform.system()
     click.echo(click.style("  Start the service (scheduler + Telegram bot):\n", fg="bright_black"))
     click.echo(click.style("    gemma-brief serve\n", bold=True))
-    click.echo(click.style("  Or run a one-off brief right now:\n", fg="bright_black"))
-    click.echo(click.style("    gemma-brief run-daily\n", bold=True))
+    click.echo(click.style("  Or generate a brief right now:\n", fg="bright_black"))
+    click.echo(click.style("    gemma-brief run\n", bold=True))
 
     if system == "Darwin":
         click.echo(click.style("  Install as a macOS background service (survives reboots):\n", fg="bright_black"))
@@ -584,6 +586,27 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         show_default=bool(existing.get("RSS_PODCAST_FEEDS")),
     )
 
+    click.echo()
+    _info("Daily brief time — when the scheduler runs each day (server local time).")
+    _info("Examples: 07:00  morning · 02:00  overnight · 18:00  evening")
+    while True:
+        brief_time = click.prompt(
+            click.style("  Daily brief time  (HH:MM)", bold=True),
+            default=existing.get("DAILY_BRIEF_TIME", "02:00"),
+        ).strip()
+        parts = brief_time.split(":")
+        if (
+            len(parts) == 2
+            and parts[0].isdigit()
+            and parts[1].isdigit()
+            and 0 <= int(parts[0]) <= 23
+            and 0 <= int(parts[1]) <= 59
+        ):
+            brief_time = f"{int(parts[0]):02d}:{int(parts[1]):02d}"
+            _ok(f"Daily brief set for  {click.style(brief_time, bold=True)}")
+            break
+        _warn(f"{brief_time!r} is not valid — enter HH:MM, e.g. 07:00")
+
     _step_end()
 
     # ── write .env ────────────────────────────────────────────────────────────
@@ -611,6 +634,7 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         values["YOUTUBE_PLAYLIST_URLS"] = yt_playlists
     if rss_feeds:
         values["RSS_PODCAST_FEEDS"] = rss_feeds
+    values["DAILY_BRIEF_TIME"] = brief_time
 
     _write_env(env_path, values)
-    _show_summary(llm_model, telegram_token, telegram_chats, yt_playlists, rss_feeds)
+    _show_summary(llm_model, telegram_token, telegram_chats, yt_playlists, rss_feeds, brief_time)
