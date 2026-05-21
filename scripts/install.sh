@@ -73,7 +73,10 @@ if [ ! -x "$ROOT/.venv/bin/gemma-brief" ]; then
     printf "  Installing package...\n"
     uv pip install -e .
 fi
+# Symlink into ~/.local/bin so `gemma-brief` works without activating the venv
+ln -sf "$ROOT/.venv/bin/gemma-brief" "$LOCAL_BIN/gemma-brief"
 ok "gemma-brief $(ver "$ROOT/.venv/bin/gemma-brief" --version)"
+ok "symlinked → $LOCAL_BIN/gemma-brief"
 
 # ── 3. Ollama + model ─────────────────────────────────────────────────────────
 step "Ollama + Gemma 4 E4B"
@@ -167,8 +170,9 @@ printf "  ║            ✓  Install complete!                  ║\n"
 printf "  ╚══════════════════════════════════════════════════╝\n"
 printf "${RESET}\n"
 
-printf "  Run the setup wizard to add your YouTube playlists\n"
-printf "  and Telegram credentials:\n\n"
-printf "  ${BOLD}  ./.venv/bin/gemma-brief setup${RESET}\n\n"
+printf "  gemma-brief is now on your PATH. Run the setup wizard:\n\n"
+printf "  ${BOLD}  gemma-brief setup${RESET}\n\n"
 printf "  Then start the service:\n\n"
-printf "  ${BOLD}  ./.venv/bin/gemma-brief serve${RESET}\n\n"
+printf "  ${BOLD}  gemma-brief serve${RESET}\n\n"
+printf "  ${YELLOW}If gemma-brief is not found, open a new terminal tab${RESET}\n"
+printf "  ${YELLOW}or run: source ~/.zshrc${RESET}\n\n"

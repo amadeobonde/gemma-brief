@@ -316,6 +316,8 @@ def _show_summary(
     click.echo(click.style("    gemma-brief run-daily\n", bold=True))
     click.echo(click.style("  Install as a macOS background service (survives reboots):\n", fg="bright_black"))
     click.echo(click.style("    ./scripts/install-launchd.sh\n", bold=True))
+    click.echo(click.style("  If gemma-brief is not found, use the full path:\n", fg="bright_black"))
+    click.echo(click.style("    ./.venv/bin/gemma-brief serve\n", fg="bright_black"))
 
 
 # ── main wizard ───────────────────────────────────────────────────────────────
