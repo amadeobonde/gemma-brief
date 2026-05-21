@@ -64,6 +64,20 @@ class WhisperHttpTranscriber:
         }
         log.info("Whisper: transcribing %d bytes -> %s (word timestamps)", len(audio), url)
         resp = httpx.post(url, files=files, data=data, timeout=self.timeout_seconds)
+
+        # Some Whisper builds 500 on word-timestamp requests (OOM, model
+        # limitation, long audio). Fall back to segment-only — the brief still
+        # works; /debate clip precision is reduced but nothing crashes.
+        if resp.status_code >= 500:
+            log.warning(
+                "Whisper: word-timestamp request returned %d — retrying without "
+                "word timestamps (segment-only). /debate clip precision reduced.",
+                resp.status_code,
+            )
+            files = {"file": (filename, audio, "audio/mpeg")}  # rewind after read
+            data_fallback = {"response_format": "verbose_json"}
+            resp = httpx.post(url, files=files, data=data_fallback, timeout=self.timeout_seconds)
+
         resp.raise_for_status()
         body = resp.json()
         transcript = _parse_response(body)
