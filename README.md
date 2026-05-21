@@ -89,8 +89,8 @@ The wizard looks like this:
   ·  Create a bot at t.me/BotFather → /newbot
   ·  Get your chat ID by messaging @userinfobot
 
-  Bot token:  ••••••••••••••••
-  Chat IDs:   123456789, 987654321
+  Bot token  (TELEGRAM_BOT_TOKEN)  [hidden] : 
+  Chat IDs   (comma-separated)     [hidden] : 
   │
 
   ┌─ Step 3/3  ·  Content Sources ──────────────────────────

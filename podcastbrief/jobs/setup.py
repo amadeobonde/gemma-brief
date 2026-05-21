@@ -356,12 +356,16 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     telegram_token = click.prompt(
         click.style("  Bot token  (TELEGRAM_BOT_TOKEN)", bold=True),
         default=existing.get("TELEGRAM_BOT_TOKEN", ""),
-        show_default=bool(existing.get("TELEGRAM_BOT_TOKEN")),
+        show_default=False,
+        hide_input=True,
+        prompt_suffix=click.style("  [hidden] ", fg="bright_black") + ": ",
     )
     telegram_chats = click.prompt(
         click.style("  Chat IDs   (comma-separated)", bold=True),
         default=existing.get("TELEGRAM_CHAT_IDS", ""),
-        show_default=bool(existing.get("TELEGRAM_CHAT_IDS")),
+        show_default=False,
+        hide_input=True,
+        prompt_suffix=click.style("  [hidden] ", fg="bright_black") + ": ",
     )
     _step_end()
 
@@ -396,7 +400,9 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     fred_key = click.prompt(
         click.style("  FRED API key  (blank to skip)", bold=True),
         default=existing.get("FRED_API_KEY", ""),
-        show_default=bool(existing.get("FRED_API_KEY")),
+        show_default=False,
+        hide_input=True,
+        prompt_suffix=click.style("  [hidden] ", fg="bright_black") + ": ",
     )
     _step_end()
 
