@@ -7,9 +7,8 @@ What it does in order:
   1. Checks + installs system dependencies (Ollama, Docker, yt-dlp, ffmpeg)
   2. Pulls Gemma 4 E4B via Ollama if not already present
   3. Starts Whisper + Gotenberg Docker containers if not running
-  4. Collects Spotify, Telegram, YouTube, RSS, and Apple Music credentials
-  5. Runs Spotify OAuth to obtain a refresh token (if Spotify configured)
-  6. Writes (or updates) .env in the current working directory
+  4. Collects Telegram credentials and YouTube / RSS content sources
+  5. Writes (or updates) .env in the current working directory
 
 After running setup, start the service with:
   podcastbrief serve       # scheduler + Telegram bot in one process
@@ -17,9 +16,7 @@ After running setup, start the service with:
 """
 from __future__ import annotations
 
-import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -77,7 +74,6 @@ def _local_bin() -> Path:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _ensure_ollama() -> bool:
-    """Check Ollama is installed and running. Return True if ready."""
     if not _cmd_exists("ollama"):
         if platform.system() == "Darwin":
             _warn(
@@ -105,7 +101,6 @@ def _ensure_ollama() -> bool:
 
 
 def _ensure_gemma(model: str = "gemma4:e4b") -> None:
-    """Pull the Gemma model if it's not already local."""
     try:
         result = _run(["ollama", "list"])
         if model in result.stdout:
@@ -122,7 +117,6 @@ def _ensure_gemma(model: str = "gemma4:e4b") -> None:
 
 
 def _ensure_docker() -> bool:
-    """Check Docker is available. Return True if ready."""
     if not _cmd_exists("docker"):
         if platform.system() == "Darwin":
             _warn(
@@ -145,7 +139,6 @@ def _ensure_docker() -> bool:
 
 
 def _ensure_containers(repo_root: Path) -> None:
-    """Start Whisper + Gotenberg via docker compose if not already running."""
     try:
         running = _run(["docker", "ps", "--format", "{{.Names}}"]).stdout
     except Exception:
@@ -179,7 +172,6 @@ def _ensure_containers(repo_root: Path) -> None:
 
 
 def _ensure_ytdlp() -> None:
-    """Install yt-dlp standalone binary if not found."""
     if _cmd_exists("yt-dlp"):
         try:
             v = _run(["yt-dlp", "--version"]).stdout.strip()
@@ -191,7 +183,6 @@ def _ensure_ytdlp() -> None:
     local_bin = _local_bin()
     dest = local_bin / "yt-dlp"
     system = platform.system()
-    machine = platform.machine()
 
     if system == "Darwin":
         url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
@@ -212,7 +203,6 @@ def _ensure_ytdlp() -> None:
 
 
 def _ensure_ffmpeg() -> None:
-    """Best-effort: report ffmpeg status (voice replies need it)."""
     if _cmd_exists("ffmpeg"):
         try:
             v = _run(["ffmpeg", "-version"]).stdout.splitlines()[0]
@@ -232,7 +222,6 @@ def _ensure_ffmpeg() -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _read_env(env_path: Path) -> dict[str, str]:
-    """Parse a .env file into a {KEY: value} dict (ignores comments/blanks)."""
     out: dict[str, str] = {}
     if not env_path.exists():
         return out
@@ -247,7 +236,6 @@ def _read_env(env_path: Path) -> dict[str, str]:
 
 
 def _write_env(env_path: Path, values: dict[str, str]) -> None:
-    """Write key=value pairs to .env, preserving existing comments/structure."""
     if env_path.exists():
         lines = env_path.read_text(encoding="utf-8").splitlines()
     else:
@@ -266,7 +254,6 @@ def _write_env(env_path: Path, values: dict[str, str]) -> None:
                 continue
         new_lines.append(line)
 
-    # Append any keys that weren't already in the file.
     remaining = {k: v for k, v in values.items() if k not in updated}
     if remaining:
         new_lines.append("")
@@ -275,12 +262,6 @@ def _write_env(env_path: Path, values: dict[str, str]) -> None:
             new_lines.append(f"{k}={v}")
 
     env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-
-
-def _extract_playlist_id(url: str) -> str:
-    """Extract Spotify playlist ID from a URL or return the raw string."""
-    m = re.search(r"open\.spotify\.com/playlist/([A-Za-z0-9]+)", url)
-    return m.group(1) if m else url.strip()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -295,8 +276,7 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         "\nThis wizard will:\n"
         "  • Check + install required tools (Ollama, Docker, yt-dlp, ffmpeg)\n"
         "  • Pull Gemma 4 E4B and start Whisper / Gotenberg containers\n"
-        "  • Collect your credentials and playlist / feed URLs\n"
-        "  • Run Spotify OAuth to get a refresh token (if Spotify is configured)\n"
+        "  • Collect your Telegram credentials and YouTube / RSS playlist URLs\n"
         "  • Write your .env\n\n"
         "Press Ctrl+C to quit at any time."
     )
@@ -304,7 +284,7 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     existing = _read_env(env_path)
 
     # ── 1. DEPENDENCIES ────────────────────────────────────────────────────────
-    _section("1 / 5  Dependencies")
+    _section("1 / 3  Dependencies")
 
     ollama_ok = _ensure_ollama()
     if ollama_ok:
@@ -323,7 +303,7 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     _ensure_ffmpeg()
 
     # ── 2. TELEGRAM ────────────────────────────────────────────────────────────
-    _section("2 / 5  Telegram Bot")
+    _section("2 / 3  Telegram Bot")
     click.echo(
         "  Create a bot via @BotFather → /newbot.\n"
         "  Get your chat ID by messaging @userinfobot.\n"
@@ -339,149 +319,65 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         show_default=bool(existing.get("TELEGRAM_CHAT_IDS")),
     )
 
-    # ── 3. SOURCES ─────────────────────────────────────────────────────────────
-    _section("3 / 5  Content Sources")
+    # ── 3. CONTENT SOURCES ─────────────────────────────────────────────────────
+    _section("3 / 3  Content Sources")
 
-    # Spotify
-    click.echo("  ── Spotify (optional) ──")
-    spotify_id = click.prompt(
-        "  Client ID (SPOTIFY_CLIENT_ID)",
-        default=existing.get("SPOTIFY_CLIENT_ID", ""),
-        show_default=bool(existing.get("SPOTIFY_CLIENT_ID")),
+    # YouTube playlists (primary source — at least one required)
+    click.echo(
+        "  ── YouTube Playlists (required) ──\n"
+        "  Paste one or more YouTube playlist URLs, comma-separated.\n"
+        "  Example: https://www.youtube.com/playlist?list=PLxxxxxxxxxx\n"
     )
-    spotify_secret = click.prompt(
-        "  Client secret (SPOTIFY_CLIENT_SECRET)",
-        default=existing.get("SPOTIFY_CLIENT_SECRET", ""),
-        show_default=bool(existing.get("SPOTIFY_CLIENT_SECRET")),
-        hide_input=True, prompt_suffix=": ",
-    ) if spotify_id else ""
-    spotify_playlist_raw = click.prompt(
-        "  Playlist URL or ID (SPOTIFY_PLAYLIST_ID)",
-        default=existing.get("SPOTIFY_PLAYLIST_ID", ""),
-        show_default=bool(existing.get("SPOTIFY_PLAYLIST_ID")),
-    ) if spotify_id else ""
-    spotify_playlist_id = _extract_playlist_id(spotify_playlist_raw) if spotify_playlist_raw else ""
-
-    # YouTube
-    click.echo("\n  ── YouTube (optional) ──")
-    yt_playlist = click.prompt(
-        "  Playlist URL (YOUTUBE_PLAYLIST_URL, blank to skip)",
-        default=existing.get("YOUTUBE_PLAYLIST_URL", ""),
-        show_default=bool(existing.get("YOUTUBE_PLAYLIST_URL")),
+    yt_playlists = click.prompt(
+        "  YouTube playlist URL(s) (YOUTUBE_PLAYLIST_URLS)",
+        default=existing.get("YOUTUBE_PLAYLIST_URLS", ""),
+        show_default=bool(existing.get("YOUTUBE_PLAYLIST_URLS")),
     )
+    while not yt_playlists.strip():
+        click.echo("  At least one YouTube playlist URL is required.")
+        yt_playlists = click.prompt("  YouTube playlist URL(s)")
 
     # RSS Podcast feeds
     click.echo("\n  ── RSS Podcast Feeds (optional) ──")
     click.echo("  Paste comma-separated RSS feed URLs — one per show.")
-    click.echo("  Covers Spotify, Apple Podcasts, Pocket Casts, Overcast, any indie feed.")
     rss_podcast = click.prompt(
         "  RSS podcast feeds (RSS_PODCAST_FEEDS, blank to skip)",
         default=existing.get("RSS_PODCAST_FEEDS", ""),
         show_default=bool(existing.get("RSS_PODCAST_FEEDS")),
     )
 
-    # Apple Music
-    click.echo("\n  ── Apple Music (optional, requires developer token) ──")
-    click.echo("  See: https://developer.apple.com/documentation/applemusicapi/generating_developer_tokens")
-    am_playlist = click.prompt(
-        "  Playlist URL (APPLE_MUSIC_PLAYLIST_URL, blank to skip)",
-        default=existing.get("APPLE_MUSIC_PLAYLIST_URL", ""),
-        show_default=bool(existing.get("APPLE_MUSIC_PLAYLIST_URL")),
-    )
-    am_token = ""
-    if am_playlist:
-        am_token = click.prompt(
-            "  Developer JWT token (APPLE_MUSIC_DEV_TOKEN)",
-            default=existing.get("APPLE_MUSIC_DEV_TOKEN", ""),
-            show_default=False,
-        )
-
-    # ── 4. OPTIONAL ENRICHMENT ─────────────────────────────────────────────────
-    _section("4 / 5  Optional Enrichment")
-    click.echo("  FRED API key enables macro-indicator charts in every brief.")
-    click.echo("  Free, instant: https://fred.stlouisfed.org/docs/api/api_key.html")
+    # Optional enrichment
+    click.echo("\n  ── Optional: FRED Macro Enrichment ──")
+    click.echo("  Free, instant key: https://fred.stlouisfed.org/docs/api/api_key.html")
     fred_key = click.prompt(
         "  FRED API key (blank to skip)",
         default=existing.get("FRED_API_KEY", ""),
         show_default=bool(existing.get("FRED_API_KEY")),
     )
 
-    # ── 5. SPOTIFY OAUTH ───────────────────────────────────────────────────────
-    spotify_refresh_token = existing.get("SPOTIFY_REFRESH_TOKEN", "")
-    if spotify_id and spotify_secret and not spotify_refresh_token:
-        _section("5 / 5  Spotify OAuth")
-        click.echo(
-            "  Before proceeding, make sure this redirect URI is registered\n"
-            "  in your Spotify Developer Dashboard for this app:\n\n"
-            "    http://127.0.0.1:3000/discovery\n\n"
-            "  (Stop the Gotenberg container briefly if port 3000 is taken:\n"
-            "   docker stop podcastbrief-gotenberg  then restart after OAuth)\n"
-        )
-        if click.confirm("  Run Spotify OAuth now to get a refresh token?", default=True):
-            try:
-                # Temporarily set env vars so auth_spotify can pick them up.
-                os.environ["SPOTIFY_CLIENT_ID"] = spotify_id
-                os.environ["SPOTIFY_CLIENT_SECRET"] = spotify_secret
-                from podcastbrief.jobs.auth_spotify import run_spotify_auth
-                spotify_refresh_token = run_spotify_auth()
-                _ok("Spotify OAuth successful — refresh token obtained")
-            except Exception as exc:
-                _warn(
-                    f"OAuth failed: {exc}\n"
-                    "  Run  podcastbrief auth-spotify --write-env  later to complete it."
-                )
-    else:
-        _section("5 / 5  Spotify OAuth")
-        if spotify_refresh_token:
-            _ok("SPOTIFY_REFRESH_TOKEN already set — skipping OAuth")
-        elif not spotify_id:
-            _ok("Spotify not configured — skipping OAuth")
-
     # ── WRITE .ENV ─────────────────────────────────────────────────────────────
     _section("Writing .env")
 
     values: dict[str, str] = {}
 
-    # Spotify
-    if spotify_id:
-        values["SPOTIFY_CLIENT_ID"] = spotify_id
-    if spotify_secret:
-        values["SPOTIFY_CLIENT_SECRET"] = spotify_secret
-    if spotify_refresh_token:
-        values["SPOTIFY_REFRESH_TOKEN"] = spotify_refresh_token
-    if spotify_playlist_id:
-        values["SPOTIFY_PLAYLIST_ID"] = spotify_playlist_id
-
-    # Telegram
     if telegram_token:
         values["TELEGRAM_BOT_TOKEN"] = telegram_token
     if telegram_chats:
         values["TELEGRAM_CHAT_IDS"] = telegram_chats
 
-    # LLM
     values["LLM_MODEL"] = llm_model
     values["OLLAMA_HOST"] = existing.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-
-    # Services (keep existing overrides or use defaults)
     values["WHISPER_URL"] = existing.get("WHISPER_URL", "http://localhost:9000")
     values["WHISPER_TIMEOUT_SECONDS"] = existing.get("WHISPER_TIMEOUT_SECONDS", "1800")
     values["GOTENBERG_URL"] = existing.get("GOTENBERG_URL", "http://localhost:3000")
 
-    # New sources
-    if yt_playlist:
-        values["YOUTUBE_PLAYLIST_URL"] = yt_playlist
+    if yt_playlists:
+        values["YOUTUBE_PLAYLIST_URLS"] = yt_playlists
     if rss_podcast:
         values["RSS_PODCAST_FEEDS"] = rss_podcast
-    if am_playlist:
-        values["APPLE_MUSIC_PLAYLIST_URL"] = am_playlist
-    if am_token:
-        values["APPLE_MUSIC_DEV_TOKEN"] = am_token
-
-    # Enrichment
     if fred_key:
         values["FRED_API_KEY"] = fred_key
 
-    # Preserve paths and log level
     values["NOTES_DIR"] = existing.get("NOTES_DIR", "./podcast_notes")
     values["PDF_OUT_DIR"] = existing.get("PDF_OUT_DIR", "./briefs")
     values["LOG_LEVEL"] = existing.get("LOG_LEVEL", "INFO")
@@ -489,7 +385,6 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     _write_env(env_path, values)
     _ok(f".env written to {env_path}")
 
-    # ── NEXT STEPS ─────────────────────────────────────────────────────────────
     click.echo()
     click.echo(click.style("✓  Setup complete!", fg="green", bold=True))
     click.echo(

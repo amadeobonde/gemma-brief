@@ -6,11 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    spotify_client_id: str = ""
-    spotify_client_secret: str = ""
-    spotify_refresh_token: str = ""
-    spotify_playlist_id: str = "2bASZuGKSImz0sw4pE9B8P"
-
     telegram_bot_token: str = ""
     telegram_chat_ids: str = ""
 
@@ -41,13 +36,13 @@ class Settings(BaseSettings):
     def rss_feed_list(self) -> list[str]:
         return [u.strip() for u in self.rss_news_feeds.split(",") if u.strip()]
 
-    # YouTube playlist (yt-dlp). Paste the full playlist URL.
-    youtube_playlist_url: str = ""
+    # YouTube playlist URLs (yt-dlp). Comma-separated — add as many as you like.
+    # Example: https://www.youtube.com/playlist?list=PLxxxxxxx
+    youtube_playlist_urls: str = ""
 
-    # Apple Music public playlist URL + developer JWT token (MusicKit).
-    # Generate a token at https://developer.apple.com/documentation/applemusicapi/generating_developer_tokens
-    apple_music_playlist_url: str = ""
-    apple_music_dev_token: str = ""
+    @property
+    def youtube_playlist_url_list(self) -> list[str]:
+        return [u.strip() for u in self.youtube_playlist_urls.split(",") if u.strip()]
 
     # Podcast RSS feed subscriptions (separate from rss_news_feeds).
     # Comma-separated RSS feed URLs — covers every podcast platform.

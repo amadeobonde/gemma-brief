@@ -11,7 +11,7 @@ class Episode:
     show_name: str
     added_at: datetime
     duration_ms: int
-    spotify_url: str
+    source_url: str
     audio_url: str = ""  # Direct audio URL for YouTube/RSS sources; empty = use FeedResolver
 
 

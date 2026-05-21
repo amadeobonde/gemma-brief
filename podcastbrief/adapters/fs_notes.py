@@ -68,10 +68,10 @@ class FilesystemNoteStore:
             meta = dict(post.metadata or {})
             stored = str(meta.get("episode_id") or "").strip()
             if not stored:
-                # Backward compat: derive from `spotify` URL on older notes.
-                spotify_url = str(meta.get("spotify") or "")
-                if "/episode/" in spotify_url:
-                    stored = spotify_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
+                # Backward compat: older notes stored the URL under "spotify" key.
+                legacy_url = str(meta.get("spotify") or meta.get("source_url") or "")
+                if "/episode/" in legacy_url:
+                    stored = legacy_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
             if stored == episode_id:
                 return StoredNoteRecord(
                     file_stem=path.stem,

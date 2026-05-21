@@ -204,7 +204,7 @@ class RenderInput(BaseModel):
     episode_title: str
     runtime: str
     pub_date: str | None
-    spotify_url: str | None
+    source_url: str | None
     artwork_png: bytes | None = None
     suggestions: list[dict] = Field(default_factory=list)
     generated_at: str

@@ -23,7 +23,7 @@ class YouTubeFeedResolver:
     """FeedResolver that treats Episode.audio_url as a YouTube watch URL."""
 
     def find_audio(self, episode: Episode) -> AudioRef:
-        url = episode.audio_url or episode.spotify_url
+        url = episode.audio_url or episode.source_url
         if not url or ("youtube.com" not in url and "youtu.be" not in url):
             raise ValueError(f"No YouTube URL on episode: {episode.name!r}")
         return AudioRef(
@@ -37,12 +37,12 @@ class YouTubeFeedResolver:
 class DirectAudioFeedResolver:
     """FeedResolver for sources that already carry the audio URL on Episode.audio_url.
 
-    Used by RssFeedSource and AppleMusicSource (when a direct enclosure URL is
-    available). Falls back to episode.spotify_url if audio_url is empty.
+    Used by RssFeedSource and other sources that embed the audio URL directly.
+    Falls back to episode.source_url if audio_url is empty.
     """
 
     def find_audio(self, episode: Episode) -> AudioRef:
-        url = episode.audio_url or episode.spotify_url
+        url = episode.audio_url or episode.source_url
         if not url:
             raise ValueError(f"No audio URL on episode: {episode.name!r}")
         return AudioRef(

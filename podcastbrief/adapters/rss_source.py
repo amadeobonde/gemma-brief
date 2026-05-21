@@ -131,7 +131,7 @@ class RssFeedSource:
                     show_name=show_name,
                     added_at=pub_date or datetime.now(timezone.utc),
                     duration_ms=duration_s * 1000,
-                    spotify_url=listen_url,
+                    source_url=listen_url,
                     audio_url=audio_url,
                 )
             )

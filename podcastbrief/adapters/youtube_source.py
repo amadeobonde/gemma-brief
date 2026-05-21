@@ -103,7 +103,7 @@ class YouTubePlaylistSource:
                     show_name=uploader,
                     added_at=added_at,
                     duration_ms=duration_s * 1000,
-                    spotify_url=yt_url,
+                    source_url=yt_url,
                     audio_url=yt_url,
                 )
             )

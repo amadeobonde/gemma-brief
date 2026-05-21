@@ -30,40 +30,6 @@ def cleanup_notes_cmd() -> None:
     click.echo(f"Cleared {n} note(s).")
 
 
-@cli.command("auth-spotify")
-@click.option(
-    "--write-env",
-    is_flag=True,
-    help="Append/replace SPOTIFY_REFRESH_TOKEN in ./.env automatically.",
-)
-@click.option(
-    "--env-path",
-    type=click.Path(path_type=Path),
-    default=Path(".env"),
-    help="Path to .env file (only used with --write-env).",
-)
-def auth_spotify_cmd(write_env: bool, env_path: Path) -> None:
-    """One-time OAuth flow to obtain a Spotify refresh token.
-
-    Uses the registered redirect URI http://127.0.0.1:3000/discovery — make sure
-    that URI is in your Spotify Developer Dashboard for this app.
-    """
-    from podcastbrief.jobs.auth_spotify import (
-        REDIRECT_URI,
-        run_spotify_auth,
-        update_env_file,
-    )
-
-    click.echo(f"Required redirect URI: {REDIRECT_URI}")
-    token = run_spotify_auth()
-    click.echo("\n=== SUCCESS ===\n")
-    if write_env:
-        update_env_file(env_path, token)
-        click.echo(f"Wrote SPOTIFY_REFRESH_TOKEN to {env_path}")
-    else:
-        click.echo("Add this line to your .env file:\n")
-        click.echo(f"SPOTIFY_REFRESH_TOKEN={token}\n")
-
 
 @cli.command("run-bot")
 def run_bot_cmd() -> None:
@@ -112,7 +78,7 @@ def test_brief_cmd(audio_path: Path, show: str, title: str, artwork: Path | None
         episode_title=title,
         runtime="",
         pub_date=None,
-        spotify_url=None,
+        source_url=None,
         artwork_png=art_bytes,
         suggestions=[],
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -190,7 +156,7 @@ def add_cmd(target: str, playlist_url: str, rss_url: str, env_path: Path) -> Non
       podcastbrief add --playlist https://www.youtube.com/playlist?list=...
       podcastbrief add --rss https://feeds.simplecast.com/...
 
-    The URL is appended to the matching .env variable (YOUTUBE_PLAYLIST_URL
+    The URL is appended to the matching .env variable (YOUTUBE_PLAYLIST_URLS
     or RSS_PODCAST_FEEDS). Existing entries are deduplicated.
     """
     from podcastbrief.jobs.add_source import register_source

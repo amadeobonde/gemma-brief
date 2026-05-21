@@ -130,7 +130,7 @@ def _resolve_audio_paths(
     """For each moment, locate the original audio file via the vault frontmatter.
 
     Handles both the new `episode_id` frontmatter and legacy notes that carry
-    only a `spotify` URL — derives the id from the URL when needed.
+    only a legacy `spotify` URL — derives the id from the URL when needed.
     """
     from podcastbrief.jobs.maintenance import _episode_id_from_meta
 

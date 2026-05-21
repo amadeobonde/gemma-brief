@@ -73,14 +73,8 @@ def register_source(*, env_path: Path, playlist_url: str = "", rss_url: str = ""
     updates: dict[str, str] = {}
 
     if playlist_url:
-        # Single-playlist support today; future: comma-separated list.
-        current = env.get("YOUTUBE_PLAYLIST_URL", "")
-        if current and current != playlist_url:
-            log.warning(
-                "Replacing existing YOUTUBE_PLAYLIST_URL (%s) — multi-playlist support is one URL today.",
-                current,
-            )
-        updates["YOUTUBE_PLAYLIST_URL"] = playlist_url
+        merged = _dedup_csv(env.get("YOUTUBE_PLAYLIST_URLS", ""), playlist_url)
+        updates["YOUTUBE_PLAYLIST_URLS"] = merged
 
     if rss_url:
         merged = _dedup_csv(env.get("RSS_PODCAST_FEEDS", ""), rss_url)

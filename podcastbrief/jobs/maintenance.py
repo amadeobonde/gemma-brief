@@ -45,9 +45,9 @@ def _episode_id_from_meta(meta: dict) -> str:
     eid = str(meta.get("episode_id") or "").strip()
     if eid:
         return eid
-    spotify_url = str(meta.get("spotify") or "")
-    if "/episode/" in spotify_url:
-        return spotify_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
+    legacy_url = str(meta.get("spotify") or meta.get("source_url") or "")
+    if "/episode/" in legacy_url:
+        return legacy_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
     return ""
 
 
@@ -72,7 +72,7 @@ def _episode_from_meta(meta: dict) -> Episode | None:
         show_name=show,
         added_at=datetime.now(timezone.utc),
         duration_ms=0,
-        spotify_url=str(meta.get("spotify") or ""),
+        source_url=str(meta.get("source_url") or meta.get("spotify") or ""),
         audio_url="",
     )
 
@@ -80,18 +80,13 @@ def _episode_from_meta(meta: dict) -> Episode | None:
 def _source_kind(meta: dict) -> str:
     """Identify which source originally produced an episode.
 
-    Returns one of: 'youtube', 'rss', 'apple', 'spotify', 'unknown'.
+    Returns one of: 'youtube', 'rss', 'unknown'.
     """
     eid = str(meta.get("episode_id") or "")
     if eid.startswith("yt-"):
         return "youtube"
     if eid.startswith("rss-"):
         return "rss"
-    if eid.startswith("apple-"):
-        return "apple"
-    spotify = str(meta.get("spotify") or "")
-    if "open.spotify.com/episode/" in spotify:
-        return "spotify"
     return "unknown"
 
 
@@ -125,10 +120,7 @@ def redownload_audio(s: Settings) -> dict:
 
         kind = _source_kind(meta)
         try:
-            if kind == "spotify":
-                ref = itunes.find_audio(ep)
-                audio_bytes = download_audio(ref)
-            elif kind == "youtube":
+            if kind == "youtube":
                 if yt_resolver is None:
                     from podcastbrief.adapters.youtube_feed import (
                         YouTubeFeedResolver,
@@ -142,8 +134,7 @@ def redownload_audio(s: Settings) -> dict:
                 ref = yt_resolver.find_audio(ep)
                 audio_bytes = yt_downloader(ref)
             else:
-                # RSS/Apple/unknown — try the iTunes fallback by show + title.
-                # Last-ditch: works for many podcasts even without the original feed.
+                # RSS/unknown — try the iTunes fallback by show + title.
                 ref = itunes.find_audio(ep)
                 audio_bytes = download_audio(ref)
             path = store_audio(s.audio_store_path, episode_id, audio_bytes)

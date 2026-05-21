@@ -194,11 +194,10 @@ class Pipeline:
             meta = note.metadata or {}
             eid = str(meta.get("episode_id") or "").strip()
             if not eid:
-                # Backward compat: older notes only stored the spotify URL.
-                # Extract the trailing episode ID segment.
-                spotify_url = str(meta.get("spotify") or "")
-                if "/episode/" in spotify_url:
-                    eid = spotify_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
+                # Backward compat: older notes stored the source URL under "spotify" key.
+                legacy_url = str(meta.get("spotify") or meta.get("source_url") or "")
+                if "/episode/" in legacy_url:
+                    eid = legacy_url.rstrip("/").rsplit("/episode/", 1)[-1].split("?")[0]
             if eid:
                 ids.add(eid)
         return ids
@@ -278,7 +277,7 @@ class Pipeline:
             episode_title=audio_ref.title,
             runtime=_fmt_runtime(ep.duration_ms),
             pub_date=audio_ref.pub_date,
-            spotify_url=ep.spotify_url,
+            source_url=ep.source_url,
             artwork_png=artwork,
             suggestions=[
                 {"title": s.title, "show": s.show, "url": s.url} for s in suggestions
@@ -327,7 +326,7 @@ class Pipeline:
                 "title": audio_ref.title,
                 "show": ep.show_name,
                 "date": audio_ref.pub_date or "",
-                "spotify": ep.spotify_url,
+                "source_url": ep.source_url,
                 "episode_id": ep.episode_id,
                 "language": brief.language,
                 "processed": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -355,8 +354,8 @@ class Pipeline:
         md_lines.append(f"**Show:** {render_in.show_name}")
         if render_in.pub_date:
             md_lines.append(f"**Date:** {render_in.pub_date}")
-        if render_in.spotify_url:
-            md_lines.append(f"**Spotify:** {render_in.spotify_url}")
+        if render_in.source_url:
+            md_lines.append(f"**Source:** {render_in.source_url}")
         md_lines.append("")
         md_lines.append(f"## Headline\n{brief.headline}\n")
         md_lines.append(f"## TL;DR\n{brief.tldr}\n")

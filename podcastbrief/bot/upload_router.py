@@ -237,7 +237,7 @@ async def handle_youtube_or_upload(
             show_name=show_name,
             added_at=datetime.now(timezone.utc),
             duration_ms=duration_s * 1000,
-            spotify_url="",
+            source_url="",
         )
         audio_ref = AudioRef(url="", title=title, pub_date=pub_date, show_name=show_name)
         try:
