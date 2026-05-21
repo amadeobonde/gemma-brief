@@ -70,7 +70,12 @@ def build_pipeline(s: Settings) -> Pipeline:
         transcriber=WhisperHttpTranscriber(
             base_url=s.whisper_url, timeout_seconds=s.whisper_timeout_seconds
         ),
-        llm=OllamaGemma(host=s.ollama_host, model=s.llm_model),
+        llm=OllamaGemma(
+            host=s.ollama_host,
+            model=s.llm_model,
+            num_ctx=s.llm_num_ctx,
+            num_predict=s.llm_num_predict,
+        ),
         images=ItunesArtworkProvider(),
         renderer=GotenbergRenderer(base_url=s.gotenberg_url),
         notifier=TelegramNotifier(bot_token=s.telegram_bot_token),

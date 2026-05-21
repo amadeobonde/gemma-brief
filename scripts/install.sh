@@ -152,7 +152,9 @@ ok "Whisper (port 9000) + Gotenberg (port 3000) running"
 # ── 5. ffmpeg ─────────────────────────────────────────────────────────────────
 step "ffmpeg (voice replies)"
 if [ ! -x "$LOCAL_BIN/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
-    if [ "$(uname -m)" = "arm64" ] && [ "$(uname)" = "Darwin" ]; then
+    _OS="$(uname)"
+    _ARCH="$(uname -m)"
+    if [ "$_OS" = "Darwin" ] && [ "$_ARCH" = "arm64" ]; then
         printf "  Installing ffmpeg (macOS arm64 static binary)...\n"
         curl -fsSL https://www.osxexperts.net/ffmpeg71arm.zip -o /tmp/ffmpeg.zip
         unzip -q -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
@@ -160,6 +162,46 @@ if [ ! -x "$LOCAL_BIN/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
         chmod +x "$LOCAL_BIN/ffmpeg"
         xattr -d com.apple.quarantine "$LOCAL_BIN/ffmpeg" 2>/dev/null || true
         ok "ffmpeg installed → $LOCAL_BIN/ffmpeg"
+    elif [ "$_OS" = "Darwin" ] && [ "$_ARCH" = "x86_64" ]; then
+        printf "  Installing ffmpeg (macOS x86_64 static binary)...\n"
+        curl -fsSL https://www.osxexperts.net/ffmpeg71intel.zip -o /tmp/ffmpeg.zip \
+            && unzip -q -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract \
+            && cp /tmp/ffmpeg-extract/ffmpeg "$LOCAL_BIN/ffmpeg" \
+            && chmod +x "$LOCAL_BIN/ffmpeg" \
+            && xattr -d com.apple.quarantine "$LOCAL_BIN/ffmpeg" 2>/dev/null || true
+        if [ -x "$LOCAL_BIN/ffmpeg" ]; then
+            ok "ffmpeg installed → $LOCAL_BIN/ffmpeg"
+        else
+            warn "ffmpeg auto-install failed — install manually: brew install ffmpeg"
+        fi
+    elif [ "$_OS" = "Linux" ]; then
+        # Try the package manager first; fall back to a static binary.
+        if command -v apt-get >/dev/null 2>&1; then
+            printf "  Installing ffmpeg via apt...\n"
+            sudo apt-get install -y ffmpeg 2>/dev/null && ok "ffmpeg installed via apt" || \
+                warn "apt install failed — install manually: sudo apt install ffmpeg"
+        elif command -v dnf >/dev/null 2>&1; then
+            printf "  Installing ffmpeg via dnf...\n"
+            sudo dnf install -y ffmpeg 2>/dev/null && ok "ffmpeg installed via dnf" || \
+                warn "dnf install failed — install manually: sudo dnf install ffmpeg"
+        elif command -v pacman >/dev/null 2>&1; then
+            printf "  Installing ffmpeg via pacman...\n"
+            sudo pacman -S --noconfirm ffmpeg 2>/dev/null && ok "ffmpeg installed via pacman" || \
+                warn "pacman install failed — install manually: sudo pacman -S ffmpeg"
+        else
+            # Static binary from John Van Sickle's builds (widely trusted)
+            _STATIC_ARCH="$_ARCH"
+            [ "$_ARCH" = "aarch64" ] && _STATIC_ARCH="arm64"
+            _FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${_STATIC_ARCH}-static.tar.xz"
+            printf "  Downloading ffmpeg static binary (%s)...\n" "$_STATIC_ARCH"
+            curl -fsSL "$_FFMPEG_URL" -o /tmp/ffmpeg.tar.xz \
+                && tar -xf /tmp/ffmpeg.tar.xz -C /tmp/ \
+                && find /tmp -name 'ffmpeg' -type f -newer /tmp/ffmpeg.tar.xz \
+                    | head -1 | xargs -I{} cp {} "$LOCAL_BIN/ffmpeg" \
+                && chmod +x "$LOCAL_BIN/ffmpeg" \
+                && ok "ffmpeg installed → $LOCAL_BIN/ffmpeg" \
+                || warn "ffmpeg static install failed — install manually: sudo apt install ffmpeg"
+        fi
     else
         warn "ffmpeg not found — voice replies will fall back to M4A (still works)"
         printf "  Install: brew install ffmpeg  OR  sudo apt install ffmpeg\n"

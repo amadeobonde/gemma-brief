@@ -16,7 +16,6 @@ import platform
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import click
@@ -38,16 +37,6 @@ def _box_div() -> None:
 
 def _box_bot() -> None:
     click.echo(click.style("  ╚" + "═" * W + "╝", fg="cyan"))
-
-def _rule(label: str = "") -> None:
-    click.echo()
-    if label:
-        bar = click.style("  ─── ", fg="cyan") + click.style(label, fg="cyan", bold=True) + click.style(" ", fg="cyan")
-        width_used = 6 + len(label) + 1
-        rest = max(W + 4 - width_used, 0)
-        click.echo(bar + click.style("─" * rest, fg="cyan"))
-    else:
-        click.echo(click.style("  " + "─" * (W + 2), fg="cyan"))
 
 def _ok(msg: str) -> None:
     click.echo(click.style("  ✓  ", fg="green", bold=True) + msg)
@@ -83,19 +72,149 @@ def _banner() -> None:
     _box_top()
     _box_mid()
     _box_mid("  gemma-brief  ·  Setup Wizard", bold=True)
-    _box_mid("  Local AI briefing engine — Gemma 4 on-device")
+    _box_mid("  Local AI briefing engine — Gemma on-device")
     _box_mid()
     _box_div()
     _box_mid()
     _box_mid("  What we'll configure:")
-    _box_mid("    1  System dependencies (Ollama · Docker · yt-dlp)")
-    _box_mid("    2  Telegram bot  (who receives the briefs)")
-    _box_mid("    3  YouTube playlists  (what to watch)")
+    _box_mid("    1  Model selection (Gemma 2 · 3 · 4)")
+    _box_mid("    2  System dependencies (Ollama · Docker · yt-dlp)")
+    _box_mid("    3  Telegram bot  (who receives the briefs)")
+    _box_mid("    4  YouTube playlists  (what to watch)")
     _box_mid()
     _box_bot()
     click.echo()
     click.echo(click.style("  Press Ctrl+C at any time to quit.", fg="bright_black"))
     click.echo()
+
+
+# ── Gemma model catalogue ─────────────────────────────────────────────────────
+
+# Each entry: (ollama_tag, display_name, disk_gb, ram_gb, note)
+GEMMA_MODELS: list[tuple[str, str, float, int, str]] = [
+    # Gemma 4 — multimodal, vision-capable
+    ("gemma4:e2b",  "Gemma 4 E2B",  5.0,  7,  "Fastest · vision · fits 8 GB RAM"),
+    ("gemma4:e4b",  "Gemma 4 E4B",  9.6,  12, "Recommended · vision · 128K ctx"),
+    ("gemma4:12b",  "Gemma 4 12B",  13.0, 16, "Higher quality · vision · 128K ctx"),
+    ("gemma4:27b",  "Gemma 4 27B",  30.0, 35, "Max quality · vision · needs 32 GB+"),
+    # Gemma 3 — text-only, strong reasoning
+    ("gemma3:4b",   "Gemma 3 4B",   3.3,  6,  "Lightweight · text-only · 128K ctx"),
+    ("gemma3:12b",  "Gemma 3 12B",  8.1,  12, "Balanced · text-only · 128K ctx"),
+    ("gemma3:27b",  "Gemma 3 27B",  17.0, 24, "Best text quality · needs 24 GB+"),
+    # Gemma 2 — ultra lightweight
+    ("gemma2:2b",   "Gemma 2 2B",   1.7,  4,  "Ultra light · fits any device"),
+    ("gemma2:9b",   "Gemma 2 9B",   5.5,  8,  "Compact · good for 8 GB RAM"),
+    ("gemma2:27b",  "Gemma 2 27B",  16.0, 22, "Largest Gemma 2 · needs 24 GB+"),
+]
+
+# Context-window presets per model family — bigger ctx = more memory pressure.
+MODEL_CTX: dict[str, tuple[int, int]] = {
+    "gemma4": (32768, 6144),
+    "gemma3": (32768, 6144),
+    "gemma2": (8192,  4096),   # Gemma 2 supports 8K natively
+}
+
+
+def _detect_ram_gb() -> int:
+    """Best-effort total RAM detection across platforms."""
+    system = platform.system()
+    try:
+        if system == "Darwin":
+            raw = subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True).strip()
+            return int(raw) // (1024 ** 3)
+        elif system == "Linux":
+            for line in Path("/proc/meminfo").read_text().splitlines():
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    return kb // (1024 ** 2)
+        elif system == "Windows":
+            raw = subprocess.check_output(
+                ["wmic", "computersystem", "get", "TotalPhysicalMemory"], text=True
+            )
+            for line in raw.splitlines():
+                line = line.strip()
+                if line.isdigit():
+                    return int(line) // (1024 ** 3)
+    except Exception:
+        pass
+    return 0
+
+
+def _suggest_model(ram_gb: int) -> str:
+    """Pick the best default model for the detected RAM."""
+    if ram_gb >= 32:
+        return "gemma4:27b"
+    if ram_gb >= 16:
+        return "gemma4:12b"
+    if ram_gb >= 12:
+        return "gemma4:e4b"
+    if ram_gb >= 8:
+        return "gemma4:e2b"
+    if ram_gb >= 6:
+        return "gemma3:4b"
+    return "gemma2:2b"
+
+
+def _pick_model(existing_model: str) -> str:
+    """Interactive model selector with RAM-aware recommendation."""
+    ram = _detect_ram_gb()
+    suggested = _suggest_model(ram) if ram else "gemma4:e4b"
+    if existing_model and existing_model != suggested:
+        suggested = existing_model  # honour what's already in .env
+
+    click.echo()
+    click.echo(click.style("  ┌─ Model Selection ", fg="cyan", bold=True) +
+               click.style("─" * (W - 16), fg="cyan"))
+    click.echo(click.style("  │", fg="cyan"))
+    if ram:
+        click.echo(click.style("  │  ", fg="cyan") +
+                   click.style(f"Detected RAM: {ram} GB", fg="bright_black"))
+    click.echo(click.style("  │", fg="cyan"))
+
+    # Print table header
+    click.echo(click.style("  │  ", fg="cyan") +
+               click.style(f"  {'#':<3}  {'Model':<18}  {'Disk':>6}  {'RAM':>5}  Notes", bold=True))
+    click.echo(click.style("  │  ", fg="cyan") +
+               "  " + "─" * 60)
+
+    default_idx = 1
+    for i, (tag, name, disk, rq, note) in enumerate(GEMMA_MODELS, start=1):
+        is_default = (tag == suggested)
+        marker = click.style("▶", fg="cyan", bold=True) if is_default else " "
+        row = (
+            f"  {i:<3}  {name:<18}  {disk:>4.1f} GB  {rq:>3} GB  {note}"
+        )
+        if is_default:
+            click.echo(click.style("  │  ", fg="cyan") + marker +
+                       click.style(row + "  ← recommended", bold=True))
+            default_idx = i
+        else:
+            click.echo(click.style("  │  ", fg="cyan") + marker + row)
+
+    click.echo(click.style("  │", fg="cyan"))
+
+    while True:
+        raw = click.prompt(
+            click.style("  │  Select model number", fg="cyan"),
+            default=str(default_idx),
+        )
+        raw = raw.strip()
+        # Allow entering either a number or a raw tag (e.g. "gemma4:e4b")
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(GEMMA_MODELS):
+                chosen = GEMMA_MODELS[idx - 1][0]
+                break
+            _warn(f"Enter a number between 1 and {len(GEMMA_MODELS)}, or type the model tag directly.")
+        elif ":" in raw:
+            chosen = raw
+            break
+        else:
+            _warn("Enter a number from the list or a full Ollama model tag.")
+
+    _ok(f"Model set to  {click.style(chosen, bold=True)}")
+    click.echo(click.style("  │", fg="cyan"))
+    return chosen
 
 
 # ── shell helpers ─────────────────────────────────────────────────────────────
@@ -108,24 +227,39 @@ def _cmd_exists(name: str) -> bool:
 
 
 def _find_docker() -> str | None:
-    """Find the docker binary — checks PATH then known macOS Docker Desktop locations."""
+    """Find the docker binary — checks PATH then known platform-specific locations."""
     found = shutil.which("docker")
     if found:
         return found
-    # Docker Desktop on macOS installs to several locations depending on version
-    candidates = [
-        os.path.expanduser("~/.docker/bin/docker"),
-        "/Applications/Docker.app/Contents/Resources/bin/docker",
-        "/usr/local/bin/docker",
-        "/opt/homebrew/bin/docker",
-    ]
+    system = platform.system()
+    if system == "Darwin":
+        candidates = [
+            os.path.expanduser("~/.docker/bin/docker"),
+            "/Applications/Docker.app/Contents/Resources/bin/docker",
+            "/usr/local/bin/docker",
+            "/opt/homebrew/bin/docker",
+        ]
+    elif system == "Linux":
+        candidates = [
+            "/usr/bin/docker",
+            "/usr/local/bin/docker",
+            "/snap/bin/docker",
+        ]
+    elif system == "Windows":
+        candidates = [
+            r"C:\Program Files\Docker\Docker\resources\bin\docker.exe",
+            r"C:\ProgramData\DockerDesktop\version-bin\docker.exe",
+        ]
+    else:
+        candidates = []
+
     for path in candidates:
         if os.path.isfile(path) and os.access(path, os.X_OK):
-            # Add its directory to PATH so `docker compose` also works
             docker_dir = os.path.dirname(path)
             os.environ["PATH"] = docker_dir + os.pathsep + os.environ.get("PATH", "")
             return path
     return None
+
 
 def _local_bin() -> Path:
     p = Path.home() / ".local" / "bin"
@@ -137,25 +271,33 @@ def _local_bin() -> Path:
 
 def _ensure_ollama() -> bool:
     if not _cmd_exists("ollama"):
-        if platform.system() == "Darwin":
+        system = platform.system()
+        if system == "Darwin":
             _err("Ollama not found.")
             _info("Install the one-click .pkg → https://ollama.com/download")
             _info("Then re-run  gemma-brief setup")
-        else:
+            return False
+        elif system == "Linux":
             _info("Installing Ollama (Linux)…")
             try:
-                subprocess.run("curl -fsSL https://ollama.com/install.sh | sh",
-                               shell=True, check=True, timeout=300)
+                subprocess.run(
+                    "curl -fsSL https://ollama.com/install.sh | sh",
+                    shell=True, check=True, timeout=300,
+                )
                 _ok("Ollama installed")
             except Exception as exc:
                 _err(f"Ollama install failed: {exc}")
                 return False
-    else:
-        try:
-            v = _run(["ollama", "--version"]).stdout.strip().splitlines()[0]
-            _ok(f"Ollama  {v}")
-        except Exception:
-            _ok("Ollama  found")
+        elif system == "Windows":
+            _err("Ollama not found.")
+            _info("Install from → https://ollama.com/download")
+            _info("Then re-run  gemma-brief setup")
+            return False
+    try:
+        v = _run(["ollama", "--version"]).stdout.strip().splitlines()[0]
+        _ok(f"Ollama  {v}")
+    except Exception:
+        _ok("Ollama  found")
     return True
 
 
@@ -166,12 +308,17 @@ def _ensure_gemma(model: str) -> None:
             return
     except Exception:
         pass
+    # Estimate download size from catalogue; fall back to "large"
+    size_hint = next(
+        (f"~{d:.1f} GB" for tag, _, d, _, _ in GEMMA_MODELS if tag == model),
+        "large",
+    )
     click.echo()
-    click.echo(click.style(f"  Pulling {model} (~9.6 GB, one-time)…", bold=True))
-    _info("This takes 5-15 min. You only do this once.")
+    click.echo(click.style(f"  Pulling {model} ({size_hint}, one-time download)…", bold=True))
+    _info("This may take 5–30 min depending on your connection. You only do this once.")
     click.echo()
     try:
-        subprocess.run(["ollama", "pull", model], check=True, timeout=3600)
+        subprocess.run(["ollama", "pull", model], check=True, timeout=7200)
         _ok(f"{model}  ready")
     except Exception as exc:
         _warn(f"Pull failed: {exc}")
@@ -181,12 +328,15 @@ def _ensure_gemma(model: str) -> None:
 def _ensure_docker() -> bool:
     docker_bin = _find_docker()
     if not docker_bin:
-        if platform.system() == "Darwin":
-            _err("Docker not found.")
+        system = platform.system()
+        _err("Docker not found.")
+        if system == "Darwin":
             _info("Install Docker Desktop → https://www.docker.com/products/docker-desktop")
-        else:
-            _err("Docker not found.")
+        elif system == "Linux":
             _info("Install Docker Engine → https://docs.docker.com/engine/install/")
+        elif system == "Windows":
+            _info("Install Docker Desktop → https://www.docker.com/products/docker-desktop")
+            _info("Or enable WSL 2 + Docker from within WSL.")
         return False
     try:
         v = subprocess.run(
@@ -204,7 +354,7 @@ def _ensure_containers(repo_root: Path) -> None:
     except Exception:
         _warn("Couldn't check container status — skipping auto-start")
         return
-    if "whisper" in running and ("gotenberg" in running):
+    if "whisper" in running and "gotenberg" in running:
         _ok("Whisper + Gotenberg  already running")
         return
     compose_file = repo_root / "docker-compose.yml"
@@ -213,8 +363,10 @@ def _ensure_containers(repo_root: Path) -> None:
         return
     _info("Starting Whisper + Gotenberg…")
     try:
-        subprocess.run(["docker", "compose", "up", "-d"],
-                       cwd=str(repo_root), check=True, timeout=180)
+        subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            cwd=str(repo_root), check=True, timeout=300,
+        )
         _ok("Whisper (port 9000) + Gotenberg (port 3000)  running")
     except Exception as exc:
         _warn(f"docker compose up failed: {exc}")
@@ -230,12 +382,14 @@ def _ensure_ytdlp() -> None:
             _ok("yt-dlp  found")
         return
     local_bin = _local_bin()
-    dest = local_bin / "yt-dlp"
+    dest = local_bin / ("yt-dlp.exe" if platform.system() == "Windows" else "yt-dlp")
     system, machine = platform.system(), platform.machine()
     if system == "Darwin":
         url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
     elif system == "Linux":
         url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+    elif system == "Windows":
+        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
     else:
         _warn("yt-dlp: unsupported platform — install manually: pip install yt-dlp")
         return
@@ -243,11 +397,12 @@ def _ensure_ytdlp() -> None:
     try:
         import urllib.request
         urllib.request.urlretrieve(url, str(dest))
-        dest.chmod(0o755)
-        _ok(f"yt-dlp  {_run(['yt-dlp', '--version']).stdout.strip()}")
+        if system != "Windows":
+            dest.chmod(0o755)
+        _ok(f"yt-dlp  installed")
     except Exception as exc:
-        _warn(f"yt-dlp install failed: {exc}")
-        _info("Install manually: pip install yt-dlp")
+        _warn(f"yt-dlp auto-install failed: {exc}")
+        _info("Install manually:  pip install yt-dlp")
 
 
 def _ensure_ffmpeg() -> None:
@@ -257,9 +412,15 @@ def _ensure_ffmpeg() -> None:
             _ok(f"ffmpeg  {v.split(',')[0]}")
         except Exception:
             _ok("ffmpeg  found")
-    else:
-        _warn("ffmpeg not found — voice replies will fall back to M4A (still works)")
-        _info("Install: brew install ffmpeg  OR  sudo apt install ffmpeg")
+        return
+    system = platform.system()
+    _warn("ffmpeg not found — voice replies will fall back to M4A (still works)")
+    if system == "Darwin":
+        _info("Install:  brew install ffmpeg")
+    elif system == "Linux":
+        _info("Install:  sudo apt install ffmpeg   OR   sudo dnf install ffmpeg")
+    elif system == "Windows":
+        _info("Install:  winget install ffmpeg   OR  https://ffmpeg.org/download.html")
 
 
 # ── .env helpers ──────────────────────────────────────────────────────────────
@@ -323,7 +484,6 @@ def _show_summary(
 
     n_playlists = len([u for u in yt_playlists.split(",") if u.strip()])
     n_chats = len([c for c in telegram_chats.split(",") if c.strip()])
-    bot_handle = "@yourbot" if not telegram_token else "configured"
 
     _row("Model", click.style(model, bold=True))
     _row("YouTube", click.style(f"{n_playlists} playlist{'s' if n_playlists != 1 else ''}", bold=True))
@@ -335,12 +495,19 @@ def _show_summary(
     _box_bot()
     click.echo()
 
+    system = platform.system()
     click.echo(click.style("  Start the service (scheduler + Telegram bot):\n", fg="bright_black"))
     click.echo(click.style("    gemma-brief serve\n", bold=True))
     click.echo(click.style("  Or run a one-off brief right now:\n", fg="bright_black"))
     click.echo(click.style("    gemma-brief run-daily\n", bold=True))
-    click.echo(click.style("  Install as a macOS background service (survives reboots):\n", fg="bright_black"))
-    click.echo(click.style("    ./scripts/install-launchd.sh\n", bold=True))
+
+    if system == "Darwin":
+        click.echo(click.style("  Install as a macOS background service (survives reboots):\n", fg="bright_black"))
+        click.echo(click.style("    ./scripts/install-launchd.sh\n", bold=True))
+    elif system == "Linux":
+        click.echo(click.style("  Install as a Linux background service (survives reboots):\n", fg="bright_black"))
+        click.echo(click.style("    ./scripts/install-systemd.sh\n", bold=True))
+
     click.echo(click.style("  If gemma-brief is not found, use the full path:\n", fg="bright_black"))
     click.echo(click.style("    ./.venv/bin/gemma-brief serve\n", fg="bright_black"))
 
@@ -351,20 +518,17 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     _banner()
     existing = _read_env(env_path)
 
-    # ── Step 1 / 3  Dependencies ──────────────────────────────────────────────
-    _step(1, 3, "System dependencies")
+    # ── Step 1 / 4  Model ────────────────────────────────────────────────────
+    _step(1, 4, "Gemma Model")
+    _info("gemma-brief works with the full Gemma suite — pick based on your RAM.")
+    llm_model = _pick_model(existing.get("LLM_MODEL", ""))
+    _step_end()
 
+    # ── Step 2 / 4  Dependencies ─────────────────────────────────────────────
+    _step(2, 4, "System dependencies")
     ollama_ok = _ensure_ollama()
     if ollama_ok:
-        _step_end()
-        llm_model = click.prompt(
-            click.style("  Gemma model", bold=True),
-            default=existing.get("LLM_MODEL", "gemma4:e4b"),
-        )
-        _step_end()
         _ensure_gemma(llm_model)
-    else:
-        llm_model = existing.get("LLM_MODEL", "gemma4:e4b")
 
     docker_ok = _ensure_docker()
     if docker_ok:
@@ -374,8 +538,8 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     _ensure_ffmpeg()
     _step_end()
 
-    # ── Step 2 / 3  Telegram ─────────────────────────────────────────────────
-    _step(2, 3, "Telegram Bot")
+    # ── Step 3 / 4  Telegram ─────────────────────────────────────────────────
+    _step(3, 4, "Telegram Bot")
     _info("Create a bot at t.me/BotFather → /newbot")
     _info("Get your chat ID by messaging @userinfobot")
     click.echo()
@@ -396,8 +560,8 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     )
     _step_end()
 
-    # ── Step 3 / 3  Content sources ───────────────────────────────────────────
-    _step(3, 3, "Content Sources")
+    # ── Step 4 / 4  Content sources ───────────────────────────────────────────
+    _step(4, 4, "Content Sources")
     _info("Paste one or more YouTube playlist URLs (news, debates, lectures…)")
     _info("New videos uploaded in the last 24 h are picked up automatically.")
     _info("Example: https://www.youtube.com/playlist?list=PLxxxxxxx")
@@ -410,9 +574,7 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     )
     while not yt_playlists.strip():
         _warn("At least one YouTube playlist URL is required.")
-        yt_playlists = click.prompt(
-            click.style("  YouTube playlist URL(s)", bold=True)
-        )
+        yt_playlists = click.prompt(click.style("  YouTube playlist URL(s)", bold=True))
 
     click.echo()
     _info("RSS podcast feeds — optional, covers any platform with an RSS feed.")
@@ -434,8 +596,14 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
     _step_end()
 
     # ── write .env ────────────────────────────────────────────────────────────
+    # Look up optimal ctx/predict for this model family
+    family = llm_model.split(":")[0] if ":" in llm_model else llm_model
+    num_ctx, num_predict = MODEL_CTX.get(family, (32768, 6144))
+
     values: dict[str, str] = {
         "LLM_MODEL": llm_model,
+        "LLM_NUM_CTX": str(num_ctx),
+        "LLM_NUM_PREDICT": str(num_predict),
         "OLLAMA_HOST": existing.get("OLLAMA_HOST", "http://127.0.0.1:11434"),
         "WHISPER_URL": existing.get("WHISPER_URL", "http://localhost:9000"),
         "WHISPER_TIMEOUT_SECONDS": existing.get("WHISPER_TIMEOUT_SECONDS", "1800"),
@@ -456,5 +624,4 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         values["FRED_API_KEY"] = fred_key
 
     _write_env(env_path, values)
-
     _show_summary(llm_model, telegram_token, telegram_chats, yt_playlists, rss_feeds)

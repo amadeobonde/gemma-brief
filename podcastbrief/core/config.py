@@ -11,15 +11,22 @@ class Settings(BaseSettings):
 
     ollama_host: str = "http://localhost:11434"
     llm_model: str = "gemma4:e4b"
+    # Context window + output budget — auto-set by `gemma-brief setup` based on
+    # the chosen model family. Override manually for memory-constrained machines.
+    llm_num_ctx: int = 32768
+    llm_num_predict: int = 6144
 
     whisper_url: str = "http://localhost:9000"
     whisper_timeout_seconds: int = 1800
 
     gotenberg_url: str = "http://localhost:3000"
 
-    # Telegram voice-reply TTS. With Apple's premium neural voices downloaded
-    # (System Settings > Accessibility > Spoken Content > System Voice >
-    # Manage Voices), pick a name like "Ava (Premium)" or "Zoe (Premium)".
+    # Telegram voice-reply TTS.
+    # tts_backend: "auto" detects platform (macos → say, linux → espeak/pyttsx3,
+    # windows → pyttsx3). Override with "say", "espeak", "pyttsx3", or "off".
+    tts_backend: str = "auto"
+    # macOS `say` voice. Run `say -v '?'` for the full list.
+    # Premium neural voices: "Ava (Premium)", "Zoe (Premium)", "Evan (Premium)".
     tts_voice: str = "Samantha"
     tts_rate: int = 185
 
