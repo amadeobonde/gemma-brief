@@ -162,77 +162,54 @@ def _pick_model(existing_model: str) -> str:
     if existing_model and existing_model != suggested:
         suggested = existing_model  # honour what's already in .env
 
-    # ── column widths (plain text, no ANSI) ──────────────────────────────
-    C_NUM   = 3   # "10"
-    C_MODEL = 13  # "Gemma 4 E4B"
-    C_DISK  = 7   # "30.0 GB"
-    C_RAM   = 6   # "35 GB"
-    # separator width = 2 (marker+space) + C_NUM + 2 + C_MODEL + 2 + C_DISK + 2 + C_RAM + 2 + notes
-    SEP = "─" * 56
+    # Fixed column widths — keep total line under ~90 chars so nothing wraps.
+    #   BAR(5) + marker(2) + num(2) + gap(2) + model(13) + gap(2)
+    #   + disk(7) + gap(2) + ram(5) + gap(2) + notes(≤28) = ~70
+    C_NUM, C_MODEL, C_DISK, C_RAM = 2, 13, 7, 5
     BAR = click.style("  │  ", fg="cyan")
-
-    def _row(num: str, name: str, disk: str, ram_s: str, note: str,
-             *, highlight: bool = False, recommended: bool = False) -> str:
-        marker = click.style("▶ ", fg="cyan", bold=True) if recommended else "  "
-        plain = (
-            f"{num:>{C_NUM}}  {name:<{C_MODEL}}  {disk:>{C_DISK}}  {ram_s:>{C_RAM}}  {note}"
-        )
-        if highlight:
-            return BAR + marker + click.style(plain, bold=True)
-        return BAR + marker + plain
-
-    def _section(label: str) -> None:
-        click.echo(BAR)
-        click.echo(BAR + click.style(label, fg="bright_black"))
-
-    click.echo()
-    click.echo(click.style("  ┌─ Model Selection ", fg="cyan", bold=True) +
-               click.style("─" * (W - 16), fg="cyan"))
-    click.echo(click.style("  │", fg="cyan"))
 
     if ram:
         click.echo(BAR + click.style(f"Detected RAM: {ram} GB", fg="bright_black"))
+    click.echo(BAR)
 
     # Header
-    click.echo(BAR)
-    click.echo(BAR + "  " +
-               click.style(
-                   f"{'#':>{C_NUM}}  {'Model':<{C_MODEL}}  {'Disk':>{C_DISK}}  "
-                   f"{'RAM':>{C_RAM}}  Notes",
-                   bold=True,
-               ))
-    click.echo(BAR + "  " + SEP)
+    hdr = f"   {'#':>{C_NUM}}  {'Model':<{C_MODEL}}  {'Disk':>{C_DISK}}  {'RAM':>{C_RAM}}  Notes"
+    click.echo(BAR + click.style(hdr, bold=True))
+    click.echo(BAR + "   " + "─" * 50)
 
     default_idx = 1
     prev_family = ""
-    for i, (tag, name, disk, rq, note) in enumerate(GEMMA_MODELS, start=1):
-        family = tag.split(":")[0]  # gemma4 / gemma3 / gemma2
+    family_labels = {
+        "gemma4": "Gemma 4  ·  vision + text  ·  128K context",
+        "gemma3": "Gemma 3  ·  text-only      ·  128K context",
+        "gemma2": "Gemma 2  ·  text-only      ·  8K context",
+    }
 
-        # Print a section divider when the family changes
+    for i, (tag, name, disk, rq, note) in enumerate(GEMMA_MODELS, start=1):
+        family = tag.split(":")[0]
         if family != prev_family:
-            family_labels = {
-                "gemma4": "Gemma 4  —  vision + text  ·  128K context",
-                "gemma3": "Gemma 3  —  text-only  ·  128K context",
-                "gemma2": "Gemma 2  —  text-only  ·  8K context",
-            }
-            _section(family_labels.get(family, family))
+            click.echo(BAR)
+            click.echo(BAR + "   " + click.style(family_labels.get(family, family), fg="bright_black"))
             prev_family = family
 
         is_rec = (tag == suggested)
-        rec_note = note + "  ← recommended" if is_rec else note
-        click.echo(_row(
-            str(i),
-            name,
-            f"{disk:.1f} GB",
-            f"{rq} GB",
-            rec_note,
-            highlight=is_rec,
-            recommended=is_rec,
-        ))
+        # Build plain row first (no ANSI), then colorise — avoids padding bugs
+        plain = f"  {i:>{C_NUM}}  {name:<{C_MODEL}}  {disk:>5.1f} GB  {rq:>{C_RAM-2}} GB  {note}"
+        marker = click.style("▶", fg="cyan", bold=True) if is_rec else " "
+        line = BAR + marker + (click.style(plain, bold=True) if is_rec else plain)
+        click.echo(line)
         if is_rec:
             default_idx = i
 
-    click.echo(click.style("  │", fg="cyan"))
+    # Show recommendation as a footer line — never appended to a row (avoids wrap)
+    click.echo(BAR)
+    if ram:
+        rec_name = next((n for t, n, *_ in GEMMA_MODELS if t == suggested), suggested)
+        click.echo(
+            BAR + click.style("Recommended: ", fg="bright_black") +
+            click.style(f"#{default_idx}  {rec_name}  ({suggested})", bold=True)
+        )
+    click.echo(BAR)
 
     while True:
         raw = click.prompt(
@@ -244,7 +221,7 @@ def _pick_model(existing_model: str) -> str:
             if 1 <= idx <= len(GEMMA_MODELS):
                 chosen = GEMMA_MODELS[idx - 1][0]
                 break
-            _warn(f"Pick 1–{len(GEMMA_MODELS)}, or type a model tag like gemma4:e4b")
+            _warn(f"Pick 1–{len(GEMMA_MODELS)}, or type a tag like gemma4:e4b")
         elif ":" in raw:
             chosen = raw
             break
