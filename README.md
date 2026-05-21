@@ -1,12 +1,39 @@
 # gemma-brief
 
 **Local AI briefing engine for YouTube, news & debates.**  
-Point it at any YouTube playlist — news channels, debate shows, lectures, podcasts. It transcribes every new video with Whisper, runs three passes of Gemma analysis, and sends you a structured PDF brief via Telegram. Then lets you ask questions, run debates, and quiz yourself across everything in your library.
+Point it at any YouTube playlist — news channels, debates, lectures, podcasts, university courses. Whisper transcribes every new video, three passes of Gemma build a structured brief, Telegram delivers the PDF and lets you ask questions, quiz yourself, and run voice debates across everything in your library.
 
-Everything runs **fully on-device**. No OpenAI. No subscriptions. No data leaving your machine.  
-Works on **macOS · Linux · Windows (WSL 2)** and supports the **full Gemma 2 / 3 / 4 suite**.
+Everything runs **fully on-device**. No OpenAI. No cloud API. No data leaving your machine.  
+Works on **macOS · Linux · Windows (WSL 2)** with the **full Gemma 2 / 3 / 4 suite**.
 
 Built for the [DEV Gemma 4 Challenge](https://dev.to/challenges/google-gemma-2026-05-06).
+
+---
+
+## Quick start (TL;DR)
+
+Runtime: Python 3.11+ · Ollama · Docker. Full guide → [Setup guide](#setup-guide).
+
+```bash
+gemma-brief setup                    # model picker + deps + Telegram
+
+gemma-brief serve                    # scheduler + Telegram bot (24/7)
+
+# Process new videos right now
+gemma-brief run
+
+# Health check / diagnose issues
+gemma-brief status
+gemma-brief doctor                   # prints exact fix commands for every issue
+
+# Manage content sources
+gemma-brief source add --playlist https://youtube.com/playlist?list=PL...
+gemma-brief source add --rss https://feeds.simplecast.com/your-show
+gemma-brief source list
+```
+
+Tab-completion: `gemma-brief completions zsh >> ~/.zfunc/_gemma-brief`  
+Upgrading? `git pull && gemma-brief doctor`
 
 ---
 
@@ -52,83 +79,31 @@ YouTube playlists  ──►  yt-dlp (new videos, last 24 h)
 
 ---
 
-## Quick start
+## Setup guide
 
 ```bash
-# 1. Clone + install everything (Ollama, Docker, yt-dlp, ffmpeg — one script)
+# 1. Clone + install system dependencies (one script — detects macOS / Linux)
 git clone https://github.com/amadeobonde/gemma-brief
 cd gemma-brief
-./scripts/install.sh
+./scripts/install.sh       # installs Ollama, Docker, yt-dlp, ffmpeg
 
-# 2. Run the setup wizard — pick your Gemma model, add YouTube + Telegram
-./.venv/bin/gemma-brief setup
+# 2. Interactive setup wizard (model picker + Telegram + playlists)
+gemma-brief setup
 
-# 3. Start the scheduler + bot (runs 24/7, brief at 02:00 daily)
-./.venv/bin/gemma-brief serve
+# 3. Start the scheduler + Telegram bot (runs 24/7, briefs at 02:00 daily)
+gemma-brief serve
 ```
 
-The wizard looks like this:
+The wizard walks through four steps:
 
-```
-  ╔════════════════════════════════════════════════════════╗
-  ║          gemma-brief  ·  Setup Wizard                  ║
-  ║  Local AI briefing engine — Gemma on-device           ║
-  ╚════════════════════════════════════════════════════════╝
+| Step | What happens |
+|---|---|
+| **1 — Model** | RAM-aware selector across all 10 Gemma 2 / 3 / 4 variants |
+| **2 — Deps** | Checks Ollama, Docker, yt-dlp, ffmpeg; installs or fixes each |
+| **3 — Telegram** | Bot token + chat IDs (create via [@BotFather](https://t.me/BotFather)) |
+| **4 — Sources** | YouTube playlist URL(s) + optional RSS podcast feeds |
 
-  ┌─ Step 1/4  ·  Gemma Model ─────────────────────────────
-  │
-  │    #   Model              Disk    RAM  Notes
-  │    ──────────────────────────────────────────────────────
-  │    1   Gemma 4 E2B       5.0 GB    7 GB  Fastest · vision · fits 8 GB RAM
-  │  ▶ 2   Gemma 4 E4B       9.6 GB   12 GB  Recommended · vision · 128K ctx  ← recommended
-  │    3   Gemma 4 12B      13.0 GB   16 GB  Higher quality · vision · 128K ctx
-  │    4   Gemma 4 27B      30.0 GB   35 GB  Max quality · vision · needs 32 GB+
-  │    5   Gemma 3 4B        3.3 GB    6 GB  Lightweight · text-only · 128K ctx
-  │    6   Gemma 3 12B       8.1 GB   12 GB  Balanced · text-only · 128K ctx
-  │    7   Gemma 3 27B      17.0 GB   24 GB  Best text quality · needs 24 GB+
-  │    8   Gemma 2 2B        1.7 GB    4 GB  Ultra light · fits any device
-  │    9   Gemma 2 9B        5.5 GB    8 GB  Compact · good for 8 GB RAM
-  │   10   Gemma 2 27B      16.0 GB   22 GB  Largest Gemma 2 · needs 24 GB+
-  │
-  │  Select model number [2]:
-
-  ┌─ Step 2/4  ·  System dependencies ─────────────────────
-  │
-  ✓  Ollama 0.9.1
-  ✓  gemma4:e4b  already pulled
-  ✓  Docker Desktop 4.40
-  ✓  Whisper (port 9000) + Gotenberg (port 3000)  running
-  ✓  yt-dlp 2026.05.20
-  ✓  ffmpeg found
-  │
-
-  ┌─ Step 3/4  ·  Telegram Bot ─────────────────────────────
-  │
-  ·  Create a bot at t.me/BotFather → /newbot
-  ·  Get your chat ID by messaging @userinfobot
-
-  Bot token  (TELEGRAM_BOT_TOKEN)  [hidden] :
-  Chat IDs   (comma-separated)     [hidden] :
-  │
-
-  ┌─ Step 4/4  ·  Content Sources ──────────────────────────
-  │
-  ·  Paste YouTube playlist URLs (news, debates, lectures…)
-  ·  New videos uploaded in the last 24 h picked up automatically.
-
-  YouTube playlist URL(s):  https://youtube.com/playlist?list=PL...
-  │
-
-  ╔════════════════════════════════════════════════════════╗
-  ║           ✓  Setup complete!                           ║
-  ╠════════════════════════════════════════════════════════╣
-  ║                                                        ║
-  ║  Model          gemma4:e4b                             ║
-  ║  YouTube        2 playlists                            ║
-  ║  Telegram       1 chat                                 ║
-  ║                                                        ║
-  ╚════════════════════════════════════════════════════════╝
-```
+Safe to re-run at any time — updates existing settings without wiping the file.
 
 ---
 
@@ -287,7 +262,7 @@ Each brief is an image-forward PDF with:
 - **Voice in, voice out.** Send a Telegram voice message → Whisper STT → RAG → TTS (macOS `say` / Linux `espeak-ng` / Windows SAPI) → ffmpeg Opus encode → voice bubble back in Telegram.
 - **Obsidian-style vault.** Markdown files with YAML frontmatter, BM25 retrieval, `INDEX.md` and `[[wikilinks]]` auto-maintained. No vector DB, no embeddings cost.
 - **Multi-language.** Whisper detects language; the directive flows through every Gemma prompt. Briefs in Spanish get answered in Spanish.
-- **Ports & adapters architecture.** Every integration is a `Protocol` in [`podcastbrief/ports/`](podcastbrief/ports/). Swap Whisper for Deepgram, Telegram for Slack, Ollama for a cloud LLM — one implementation, zero pipeline changes.
+- **Ports & adapters architecture.** Every integration is a `Protocol` in `ports/`. Swap Whisper for Deepgram, Telegram for Slack, Ollama for a cloud LLM — one implementation, zero pipeline changes.
 
 ---
 
@@ -306,18 +281,37 @@ Each brief is an image-forward PDF with:
 ## All CLI commands
 
 ```bash
-gemma-brief setup          # first-run wizard (model picker + credentials)
-gemma-brief run-daily      # pull new videos + generate briefs
-gemma-brief run-daily --hours 72   # extend look-back window
-gemma-brief run-daily --dry-run    # process but skip Telegram + save
-gemma-brief run-bot        # Telegram RAG bot (long-running)
-gemma-brief serve          # scheduler + bot in one process (recommended)
-gemma-brief add --playlist <url>   # register a new YouTube playlist
-gemma-brief add --rss <url>        # register an RSS feed
-gemma-brief test-brief <audio.mp3> --show "Name" --title "Title"
-gemma-brief cleanup-notes  # clear the vault (monthly)
-gemma-brief redownload-audio       # backfill audio store
-gemma-brief reindex-timestamps     # backfill Whisper word timestamps
+# Setup & service
+gemma-brief setup                           # first-run wizard (model → Telegram → sources)
+gemma-brief serve                           # scheduler + Telegram bot (recommended)
+
+# Run
+gemma-brief run                             # pull new videos + generate briefs now
+gemma-brief run --hours 72                  # extend look-back window to 72 h
+gemma-brief run --dry-run                   # full pipeline, no Telegram send
+
+# Observability
+gemma-brief status                          # health dashboard
+gemma-brief doctor                          # diagnose + print exact fix commands
+gemma-brief logs                            # last 50 log lines
+gemma-brief logs --follow                   # live stream  (Ctrl+C to stop)
+gemma-brief logs --errors                   # errors + warnings only
+
+# Sources
+gemma-brief source list                     # show configured playlists + feeds
+gemma-brief source add --playlist <url>     # add a YouTube playlist
+gemma-brief source add --rss <url>          # add a podcast RSS feed
+gemma-brief source add <url>                # auto-detected (YouTube vs RSS)
+gemma-brief source remove <url>             # remove a source
+
+# Maintenance  (infrequent)
+gemma-brief cleanup                         # clear old vault notes
+gemma-brief backfill                        # re-fetch missing episode audio
+gemma-brief reindex                         # backfill Whisper word timestamps
+
+# Dev / power user
+gemma-brief test-brief episode.mp3 --show "Name" --title "Title"
+gemma-brief completions zsh                 # print zsh completion script
 ```
 
 ---
@@ -404,18 +398,18 @@ Install pyttsx3: `pip install pyttsx3`. This uses Windows SAPI voices through th
 ## Architecture
 
 ```
-podcastbrief/
-  core/        models · Pipeline orchestrator · pydantic-settings config
-  ports/       9 Protocols — implement to plug in your own services
+gemma-brief/
+  core/        models · pipeline orchestrator · pydantic-settings config
+  ports/       Protocol definitions — swap any adapter without touching the pipeline
   adapters/    YouTube · Whisper · Ollama/Gemma · Gotenberg · Telegram
                iTunes artwork · RSS · filesystem notes · YouTube recommender
                Wikipedia + RSS news enrichers
-  briefing/    schemas · extractor (pass 1) · interrogator (pass 2)
-               grounder (pass 3) · Jinja2 HTML template + CSS
+  briefing/    schemas · extractor (Pass 1) · interrogator (Pass 2)
+               grounder (Pass 3) · Jinja2 HTML template + CSS
   bot/         RAG (BM25, no vector DB) · voice · debate
                Telegram command handlers
   jobs/        daily · cleanup · bot · setup wizard · maintenance
-  cli.py       Click entry point
+  cli.py       Click entry point — `gemma-brief` binary
 docker-compose.yml   faster-whisper + Gotenberg
 pyproject.toml
 scripts/

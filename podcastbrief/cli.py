@@ -167,7 +167,7 @@ def run_cmd(hours: int, dry_run: bool, quiet: bool) -> None:
       2  Whisper transcription
       3  Gemma Pass 1 — extract
       4  Gemma Pass 2 — sharpen
-      5  Gemma Pass 3 — ground (Yahoo, FRED, Wikipedia, RSS)
+      5  Gemma Pass 3 — ground (Wikipedia + RSS news)
       6  Gotenberg PDF render
       7  Telegram delivery
 
