@@ -248,13 +248,13 @@ Then:
 
 ```bash
 # Status
-launchctl print gui/$UID/com.podcastbrief.serve | grep -E "state|pid"
+launchctl print gui/$UID/com.gemma-brief.serve | grep -E "state|pid"
 
 # Force restart
-launchctl kickstart -k gui/$UID/com.podcastbrief.serve
+launchctl kickstart -k gui/$UID/com.gemma-brief.serve
 
 # Tail logs
-tail -f logs/podcastbrief.err.log
+tail -f logs/gemma-brief.err.log
 
 # Uninstall
 ./scripts/install-launchd.sh uninstall
