@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "podcastbrief"
-version = "0.1.0"
-description = "Modular podcast-to-morning-brief pipeline (Gemma 4 E4B, Whisper, WeasyPrint)"
+name = "gemma-brief"
+version = "1.0.0"
+description = "Local AI briefing engine for YouTube, news & debates — Gemma 4 on-device"
 requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.6",
@@ -42,7 +42,7 @@ weasyprint = ["weasyprint>=62.0"]
 ffmpeg = ["static-ffmpeg>=3.0"]
 
 [project.scripts]
-podcastbrief = "podcastbrief.cli:cli"
+gemma-brief = "podcastbrief.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]

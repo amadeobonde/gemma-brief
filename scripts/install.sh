@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
-# podcastbrief one-command install (idempotent — safe to run twice).
+# gemma-brief — one-command install (idempotent, safe to re-run).
 #
-# What it does on macOS:
-#   1. Ensures uv is installed (used for the Python 3.11 venv).
-#   2. Creates ./.venv with Python 3.11 and installs the package + deps.
-#   3. Ensures Ollama is installed and pulls gemma4:e4b.
-#   4. Ensures Docker is installed and brings up Whisper + Gotenberg containers.
-#   5. Installs ffmpeg + yt-dlp standalone binaries to ~/.local/bin (no Homebrew).
-#   6. Copies .env.example to .env (only if .env doesn't already exist).
-#   7. Prints clear next-step instructions for Spotify OAuth and Telegram setup.
-#
-# Linux: best-effort. Docker + Ollama install paths assume macOS Homebrew or
-#        the official installer scripts; users on other platforms may need to
-#        install those two manually before running this.
+# macOS & Linux. Installs:
+#   1. uv  (Python toolchain)
+#   2. .venv (Python 3.11) + gemma-brief package
+#   3. Ollama + pulls gemma4:e4b
+#   4. Docker + Whisper / Gotenberg containers
+#   5. ffmpeg + yt-dlp binaries → ~/.local/bin
+#   6. .env from .env.example (if not present)
 
 set -euo pipefail
 
@@ -26,127 +21,139 @@ case ":$PATH:" in
     *) export PATH="$LOCAL_BIN:$PATH" ;;
 esac
 
-step() { printf "\n\033[1;36m==> %s\033[0m\n" "$*"; }
-ok()   { printf "\033[1;32m✓\033[0m %s\n" "$*"; }
-warn() { printf "\033[1;33m!\033[0m %s\n" "$*"; }
+# ── helpers ──────────────────────────────────────────────────────────────────
+BOLD='\033[1m'; CYAN='\033[1;36m'; GREEN='\033[1;32m'
+YELLOW='\033[1;33m'; RED='\033[1;31m'; RESET='\033[0m'
 
-# 1. uv
+banner() {
+  printf "\n${CYAN}${BOLD}"
+  printf "  ╔══════════════════════════════════════════════════╗\n"
+  printf "  ║          gemma-brief  ·  Install                 ║\n"
+  printf "  ║  Local AI briefing engine — Gemma 4 on-device   ║\n"
+  printf "  ╚══════════════════════════════════════════════════╝\n"
+  printf "${RESET}\n"
+}
+
+step() { printf "\n${CYAN}${BOLD}── %s${RESET}\n" "$*"; }
+ok()   { printf "  ${GREEN}✓${RESET}  %s\n" "$*"; }
+warn() { printf "  ${YELLOW}!${RESET}  %s\n" "$*"; }
+err()  { printf "  ${RED}✗${RESET}  %s\n" "$*"; }
+
+banner
+
+# ── 1. uv ─────────────────────────────────────────────────────────────────────
+step "Python toolchain (uv)"
 if ! command -v uv >/dev/null 2>&1; then
-    step "Installing uv (Python toolchain manager)"
+    printf "  Installing uv...\n"
     curl -LsSf https://astral.sh/uv/install.sh | sh
+    source "$HOME/.local/bin/env" 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
 fi
-ok "uv: $(uv --version 2>&1 | head -1)"
+ok "uv $(uv --version 2>&1 | head -1)"
 
-# 2. venv + deps
-if [ ! -x "$ROOT/.venv/bin/podcastbrief" ]; then
-    step "Creating .venv with Python 3.11 + installing the package"
+# ── 2. venv + package ─────────────────────────────────────────────────────────
+step "Python 3.11 venv + gemma-brief"
+if [ ! -x "$ROOT/.venv/bin/gemma-brief" ]; then
+    printf "  Creating venv...\n"
     uv venv --python 3.11 .venv
+    printf "  Installing package...\n"
     uv pip install -e .
 fi
-ok "venv ready: $($ROOT/.venv/bin/podcastbrief --help 2>&1 | head -1)"
+ok "gemma-brief $($ROOT/.venv/bin/gemma-brief --version 2>&1 | head -1)"
 
-# 3. Ollama
+# ── 3. Ollama + model ─────────────────────────────────────────────────────────
+step "Ollama + Gemma 4 E4B"
 if ! command -v ollama >/dev/null 2>&1; then
     if [ "$(uname)" = "Darwin" ]; then
-        warn "Ollama not found. Install via https://ollama.com/download (one-click .pkg) and re-run."
+        err "Ollama not found."
+        printf "  Install the one-click .pkg → https://ollama.com/download\n"
+        printf "  Then re-run this script.\n"
         exit 1
     else
-        step "Installing Ollama (Linux)"
+        printf "  Installing Ollama (Linux)...\n"
         curl -fsSL https://ollama.com/install.sh | sh
     fi
 fi
-ok "Ollama: $(ollama --version 2>&1 | head -1)"
+ok "Ollama $(ollama --version 2>&1 | head -1)"
 
 if ! ollama list 2>/dev/null | grep -q "^gemma4:e4b"; then
-    step "Pulling gemma4:e4b (≈9.6 GB, one-time download)"
+    printf "\n  ${YELLOW}Pulling gemma4:e4b (~9.6 GB, one-time download)...${RESET}\n"
+    printf "  This takes 5-15 min on a typical connection. Go make a coffee ☕\n\n"
     ollama pull gemma4:e4b
 fi
 ok "gemma4:e4b ready"
 
-# 4. Docker
+# ── 4. Docker + containers ────────────────────────────────────────────────────
+step "Docker (Whisper + Gotenberg)"
 if ! command -v docker >/dev/null 2>&1; then
+    err "Docker not found."
     if [ "$(uname)" = "Darwin" ]; then
-        warn "Docker not found. Install Docker Desktop from https://www.docker.com/products/docker-desktop and re-run."
-        exit 1
+        printf "  Install Docker Desktop → https://www.docker.com/products/docker-desktop\n"
     else
-        warn "Docker not found. Install Docker Engine for your distro before re-running."
-        exit 1
+        printf "  Install Docker Engine → https://docs.docker.com/engine/install/\n"
     fi
+    printf "  Then re-run this script.\n"
+    exit 1
 fi
-ok "Docker: $(docker --version 2>&1 | head -1)"
+ok "Docker $(docker --version 2>&1 | head -1)"
 
-if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q podcastbrief-whisper; then
-    step "Bringing up Whisper + Gotenberg via docker compose"
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "gemma-brief-whisper\|podcastbrief-whisper"; then
+    printf "  Starting Whisper + Gotenberg containers...\n"
     docker compose up -d
 fi
-ok "Whisper + Gotenberg up"
+ok "Whisper (port 9000) + Gotenberg (port 3000) running"
 
-# 5. ffmpeg (Telegram voice replies)
+# ── 5. ffmpeg ─────────────────────────────────────────────────────────────────
+step "ffmpeg (voice replies)"
 if [ ! -x "$LOCAL_BIN/ffmpeg" ] && ! command -v ffmpeg >/dev/null 2>&1; then
     if [ "$(uname -m)" = "arm64" ] && [ "$(uname)" = "Darwin" ]; then
-        step "Installing ffmpeg (macOS arm64 static)"
+        printf "  Installing ffmpeg (macOS arm64 static binary)...\n"
         curl -fsSL https://www.osxexperts.net/ffmpeg71arm.zip -o /tmp/ffmpeg.zip
         unzip -q -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
         cp /tmp/ffmpeg-extract/ffmpeg "$LOCAL_BIN/ffmpeg"
         chmod +x "$LOCAL_BIN/ffmpeg"
         xattr -d com.apple.quarantine "$LOCAL_BIN/ffmpeg" 2>/dev/null || true
+        ok "ffmpeg installed → $LOCAL_BIN/ffmpeg"
     else
-        warn "ffmpeg missing. Install it for your platform — voice replies will fall back to M4A without it."
+        warn "ffmpeg not found — voice replies will fall back to M4A (still works)"
+        printf "  Install: brew install ffmpeg  OR  sudo apt install ffmpeg\n"
     fi
+else
+    ok "ffmpeg $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f1-3)"
 fi
-command -v ffmpeg >/dev/null 2>&1 && ok "ffmpeg: $(ffmpeg -version 2>&1 | head -1)" || true
 
-# 6. yt-dlp (YouTube ingest)
+# ── 6. yt-dlp ─────────────────────────────────────────────────────────────────
+step "yt-dlp (YouTube ingest)"
 if [ ! -x "$LOCAL_BIN/yt-dlp" ] && ! command -v yt-dlp >/dev/null 2>&1; then
-    step "Installing yt-dlp"
+    printf "  Installing yt-dlp...\n"
     if [ "$(uname)" = "Darwin" ]; then
-        curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o "$LOCAL_BIN/yt-dlp"
+        curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos \
+            -o "$LOCAL_BIN/yt-dlp"
     else
-        curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o "$LOCAL_BIN/yt-dlp"
+        curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+            -o "$LOCAL_BIN/yt-dlp"
     fi
     chmod +x "$LOCAL_BIN/yt-dlp"
 fi
-command -v yt-dlp >/dev/null 2>&1 && ok "yt-dlp: $(yt-dlp --version 2>&1 | head -1)" || true
+ok "yt-dlp $(yt-dlp --version 2>&1 | head -1)"
 
-# 7. .env
+# ── 7. .env ───────────────────────────────────────────────────────────────────
+step ".env"
 if [ ! -f .env ]; then
     cp .env.example .env
-    ok "Created .env from .env.example (fill in your credentials before first run)"
+    ok "Created .env from .env.example"
 else
     ok ".env already present"
 fi
 
-# Final summary + next steps.
-cat <<EOM
+# ── done ──────────────────────────────────────────────────────────────────────
+printf "\n${GREEN}${BOLD}"
+printf "  ╔══════════════════════════════════════════════════╗\n"
+printf "  ║            ✓  Install complete!                  ║\n"
+printf "  ╚══════════════════════════════════════════════════╝\n"
+printf "${RESET}\n"
 
-\033[1;32m✓ Install complete\033[0m
-
-Next steps:
-
-  1. Edit .env and fill in:
-       SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_PLAYLIST_ID
-       TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_IDS
-       FRED_API_KEY  (free, https://fred.stlouisfed.org/docs/api/api_key.html)
-
-  2. Spotify OAuth (one-time refresh token):
-       Make sure http://127.0.0.1:3000/discovery is in your Spotify app's
-       Redirect URIs. Then run:
-
-         docker stop podcastbrief-gotenberg    # free port 3000 briefly
-         ./.venv/bin/podcastbrief auth-spotify --write-env
-         docker start podcastbrief-gotenberg
-
-  3. Telegram bot:
-       Create a bot via @BotFather in Telegram, paste the token into
-       TELEGRAM_BOT_TOKEN, and send /start to your bot from each chat in
-       TELEGRAM_CHAT_IDS.
-
-  4. Run it:
-       ./.venv/bin/podcastbrief run-daily        # one-off daily run
-       ./.venv/bin/podcastbrief run-bot          # text + voice + commands
-       ./.venv/bin/podcastbrief serve            # scheduler + bot in one process
-
-  5. (macOS) Install as a launchd service so it survives reboots:
-       ./scripts/install-launchd.sh
-
-EOM
+printf "  Run the setup wizard to add your YouTube playlists\n"
+printf "  and Telegram credentials:\n\n"
+printf "  ${BOLD}  ./.venv/bin/gemma-brief setup${RESET}\n\n"
+printf "  Then start the service:\n\n"
+printf "  ${BOLD}  ./.venv/bin/gemma-brief serve${RESET}\n\n"

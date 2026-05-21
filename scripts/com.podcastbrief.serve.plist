@@ -15,7 +15,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>__INSTALL_DIR__/.venv/bin/podcastbrief</string>
+        <string>__INSTALL_DIR__/.venv/bin/gemma-brief</string>
         <string>serve</string>
     </array>
 
@@ -44,9 +44,9 @@
     <string>Background</string>
 
     <key>StandardOutPath</key>
-    <string>__INSTALL_DIR__/logs/podcastbrief.out.log</string>
+    <string>__INSTALL_DIR__/logs/gemma-brief.out.log</string>
 
     <key>StandardErrorPath</key>
-    <string>__INSTALL_DIR__/logs/podcastbrief.err.log</string>
+    <string>__INSTALL_DIR__/logs/gemma-brief.err.log</string>
 </dict>
 </plist>

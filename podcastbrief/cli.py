@@ -8,8 +8,18 @@ from podcastbrief.core.config import load_settings
 
 
 @click.group()
+@click.version_option("1.0.0", prog_name="gemma-brief")
 def cli() -> None:
-    """Podcast Brief — modular daily podcast → morning brief pipeline."""
+    """gemma-brief — local AI briefing engine for YouTube, news & debates.
+
+    Powered by Gemma 4 running fully on-device via Ollama.
+
+    \b
+    Quick start:
+      gemma-brief setup        interactive setup wizard
+      gemma-brief serve        scheduler + Telegram bot (recommended)
+      gemma-brief run-daily    one-off run
+    """
 
 
 @cli.command("run-daily")
