@@ -9,7 +9,7 @@ Categories:
 - Active recall: /quiz, /flashcard, /retention
 - Socratic:      /socratic, /debate, /challenge, /connect
 - Reference:     /find, /numbers, /contradictions, /define
-- Meta:          /news, /chart, /macro, /topics, /gaps, /help
+- Meta:          /news, /topics, /gaps, /help
 
 Quiz answers are appended to {notes_dir}/.retention.json so /retention can
 show overall accuracy, weakest concepts, and a streak.
@@ -26,10 +26,8 @@ from pathlib import Path
 
 import frontmatter
 
-from podcastbrief.adapters.fred_enricher import FREDEnricher
 from podcastbrief.adapters.rss_news_enricher import RSSNewsEnricher
 from podcastbrief.adapters.wikipedia_enricher import WikipediaEnricher
-from podcastbrief.adapters.yahoo_enricher import YahooFinanceEnricher
 from podcastbrief.bot.index import ObsidianIndex
 from podcastbrief.bot.rag import RagBot
 from podcastbrief.briefing.extractor import language_directive
@@ -65,8 +63,6 @@ class CommandContext:
     index: ObsidianIndex
     notes_dir: Path
     wiki: WikipediaEnricher
-    yahoo: YahooFinanceEnricher
-    fred: FREDEnricher
     rss: RSSNewsEnricher
     # Per-user mutable state.
     socratic: dict[str, bool] = field(default_factory=dict)
@@ -491,9 +487,7 @@ async def cmd_define(ctx: CommandContext, user_id: str, args: list[str]) -> list
     concept = " ".join(args).strip()
     if not concept:
         return ["Usage: /define <concept>"]
-    result = await ctx.wiki.enrich(
-        named_entities=[concept], market_entities=[], macro_indicators=[]
-    )
+    result = await ctx.wiki.enrich(named_entities=[concept])
     if not result.wiki:
         return [f"Wikipedia had no entry for '{concept}'."]
     w = result.wiki[0]
@@ -506,9 +500,7 @@ async def cmd_news(ctx: CommandContext, user_id: str, args: list[str]) -> list[s
     topic = " ".join(args).strip()
     if not topic:
         return ["Usage: /news <topic>"]
-    result = await ctx.rss.enrich(
-        named_entities=topic.split(), market_entities=[], macro_indicators=[]
-    )
+    result = await ctx.rss.enrich(named_entities=topic.split())
     if not result.news:
         return [f"No recent headlines for '{topic}' in the past 7 days."]
     out: list[str] = [f"📰 Top recent headlines for '{topic}':"]
@@ -516,20 +508,6 @@ async def cmd_news(ctx: CommandContext, user_id: str, args: list[str]) -> list[s
         date = f" · {n.pub_date}" if n.pub_date else ""
         out.append(f"\n[{n.source}{date}] {n.title}\n{n.url}\n{n.summary}")
     return _wrap("\n".join(out))
-
-
-async def cmd_macro(ctx: CommandContext, user_id: str, args: list[str]) -> list[str]:
-    series_id = (args[0].upper() if args else "").strip()
-    if not series_id:
-        return ["Usage: /macro <FRED_SERIES_ID> — e.g. /macro CPIAUCSL"]
-    result = await ctx.fred.enrich(
-        macro_indicators=[series_id], market_entities=[], named_entities=[]
-    )
-    if not result.macro:
-        return [f"FRED returned no data for {series_id} (is FRED_API_KEY set?)."]
-    s = result.macro[0]
-    txt = f"📊 {s.name} ({s.series_id})\nLatest: {s.latest_value} ({s.latest_date or '—'})"
-    return [(txt, s.chart_png)]
 
 
 async def cmd_topics(ctx: CommandContext, user_id: str, args: list[str]) -> list[str]:
@@ -616,8 +594,6 @@ REFERENCE
 
 META
 /news <topic> — top 3 recent headlines (past 7 days)
-/chart <ticker> — live Yahoo Finance chart with Gemma 4 annotation
-/macro <FRED_id> — FRED sparkline + latest value (e.g. /macro CPIAUCSL)
 /topics — recurring themes this week / month
 /gaps — open questions hosts raised but didn't resolve
 /run — reprocess the most-recently-added playlist episode
@@ -674,7 +650,6 @@ COMMANDS = {
     "contradictions": cmd_contradictions,
     "define": cmd_define,
     "news": cmd_news,
-    "macro": cmd_macro,
     "topics": cmd_topics,
     "gaps": cmd_gaps,
     "help": cmd_help,

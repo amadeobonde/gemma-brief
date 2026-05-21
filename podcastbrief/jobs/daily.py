@@ -12,8 +12,6 @@ from podcastbrief.adapters.gotenberg_renderer import GotenbergRenderer
 from podcastbrief.adapters.telegram_notifier import TelegramNotifier
 from podcastbrief.adapters.fs_notes import FilesystemNoteStore
 from podcastbrief.adapters.youtube_recommender import YouTubeRecommender
-from podcastbrief.adapters.yahoo_enricher import YahooFinanceEnricher
-from podcastbrief.adapters.fred_enricher import FREDEnricher
 from podcastbrief.adapters.wikipedia_enricher import WikipediaEnricher
 from podcastbrief.adapters.rss_news_enricher import RSSNewsEnricher
 
@@ -59,8 +57,6 @@ def build_pipeline(s: Settings) -> Pipeline:
     primary_feed = YouTubeFeedResolver()
 
     enrichers = [
-        YahooFinanceEnricher(),
-        FREDEnricher(api_key=s.fred_api_key),
         WikipediaEnricher(),
         RSSNewsEnricher(feeds=s.rss_feed_list),
     ]

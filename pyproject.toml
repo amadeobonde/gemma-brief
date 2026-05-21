@@ -21,9 +21,6 @@ dependencies = [
     "apscheduler>=3.10",
     "python-frontmatter>=1.1",
     "tenacity>=8.2",
-    # Enrichment adapters
-    "yfinance>=0.2.40",
-    "matplotlib>=3.9",
     # Audio clip extraction + stitching (/debate command). Requires ffmpeg on PATH.
     "pydub>=0.25.1",
 ]

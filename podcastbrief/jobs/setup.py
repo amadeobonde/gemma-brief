@@ -584,15 +584,6 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         show_default=bool(existing.get("RSS_PODCAST_FEEDS")),
     )
 
-    click.echo()
-    _info("FRED API key — free macro charts in briefs (fred.stlouisfed.org).")
-    fred_key = click.prompt(
-        click.style("  FRED API key  (blank to skip)", bold=True),
-        default=existing.get("FRED_API_KEY", ""),
-        show_default=False,
-        hide_input=True,
-        prompt_suffix=click.style("  [hidden] ", fg="bright_black") + ": ",
-    )
     _step_end()
 
     # ── write .env ────────────────────────────────────────────────────────────
@@ -620,8 +611,6 @@ def run_setup(*, env_path: Path, repo_root: Path) -> None:
         values["YOUTUBE_PLAYLIST_URLS"] = yt_playlists
     if rss_feeds:
         values["RSS_PODCAST_FEEDS"] = rss_feeds
-    if fred_key:
-        values["FRED_API_KEY"] = fred_key
 
     _write_env(env_path, values)
     _show_summary(llm_model, telegram_token, telegram_chats, yt_playlists, rss_feeds)

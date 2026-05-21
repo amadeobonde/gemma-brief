@@ -93,17 +93,13 @@ class RSSNewsEnricher:
     async def enrich(
         self,
         *,
-        market_entities: list[str] = (),
-        macro_indicators: list[str] = (),
         named_entities: list[str] = (),
         episode_pub_date: str | None = None,
         accent_hex: str = "#6c63ff",
     ) -> EnrichmentResult:
         if not self.feeds:
             return EnrichmentResult()
-        keywords = _tokenize(
-            " ".join(list(named_entities) + list(market_entities) + list(macro_indicators))
-        )
+        keywords = _tokenize(" ".join(list(named_entities)))
         if not keywords:
             return EnrichmentResult()
 

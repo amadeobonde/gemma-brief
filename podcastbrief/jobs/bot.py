@@ -5,10 +5,8 @@ import logging
 from pathlib import Path
 
 from podcastbrief.core.config import load_settings
-from podcastbrief.adapters.fred_enricher import FREDEnricher
 from podcastbrief.adapters.rss_news_enricher import RSSNewsEnricher
 from podcastbrief.adapters.wikipedia_enricher import WikipediaEnricher
-from podcastbrief.adapters.yahoo_enricher import YahooFinanceEnricher
 from podcastbrief.bot.commands import (
     COMMANDS,
     CommandContext,
@@ -55,8 +53,6 @@ def run_bot() -> None:
         index=ObsidianIndex(base_dir=Path(s.notes_dir)),
         notes_dir=Path(s.notes_dir),
         wiki=WikipediaEnricher(),
-        yahoo=YahooFinanceEnricher(),
-        fred=FREDEnricher(api_key=s.fred_api_key),
         rss=RSSNewsEnricher(feeds=s.rss_feed_list),
     )
 
@@ -97,13 +93,6 @@ def run_bot() -> None:
                 )
 
         await asyncio.to_thread(_do_run)
-
-    # ---- /chart uses native Gemma 4 function calling (item 8) ----
-    async def on_chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not update.message:
-            return
-        from podcastbrief.bot.chart_tool import handle_chart_command
-        await handle_chart_command(update, context, llm=pipe.llm, yahoo=cmd_ctx.yahoo)
 
     # ---- /debate: audio voice-note compilation + Gemma analysis ----
     async def on_debate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -308,7 +297,6 @@ def run_bot() -> None:
     app = Application.builder().token(s.telegram_bot_token).build()
     # Custom-handled commands first.
     app.add_handler(CommandHandler("run", on_run_command))
-    app.add_handler(CommandHandler("chart", on_chart_command))
     app.add_handler(CommandHandler("debate", on_debate_command))
     # Generic command suite.
     for name in COMMANDS:
@@ -318,5 +306,5 @@ def run_bot() -> None:
     # Voice + text last so they don't shadow the commands.
     app.add_handler(MessageHandler(filters.VOICE, on_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    log.info("Telegram bot polling started (text + voice + uploads + 17 commands + /run + /chart).")
+    log.info("Telegram bot polling started (text + voice + uploads + commands + /run + /debate).")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

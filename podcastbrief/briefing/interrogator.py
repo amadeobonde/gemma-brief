@@ -213,8 +213,6 @@ def interrogate(
         go_deeper=structure.go_deeper,
         visual_caption=structure.visual_caption,
         # Pass enrichment hooks through unchanged — Pass 2 doesn't refine these.
-        market_entities=structure.market_entities,
-        macro_indicators=structure.macro_indicators,
         named_entities=structure.named_entities,
         socratic_hooks=structure.socratic_hooks,
     )

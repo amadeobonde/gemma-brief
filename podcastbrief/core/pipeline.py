@@ -156,8 +156,6 @@ class Pipeline:
                 self.enrichers,
                 notes_dir=self.notes_dir,
                 episode_id=episode_id,
-                market_entities=brief.market_entities,
-                macro_indicators=brief.macro_indicators,
                 named_entities=brief.named_entities,
                 episode_pub_date=episode_pub_date,
                 accent_hex=accent_hex,

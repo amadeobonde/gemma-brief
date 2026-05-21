@@ -86,8 +86,6 @@ class WikipediaEnricher:
     async def enrich(
         self,
         *,
-        market_entities: list[str] = (),
-        macro_indicators: list[str] = (),
         named_entities: list[str],
         episode_pub_date: str | None = None,
         accent_hex: str = "#6c63ff",

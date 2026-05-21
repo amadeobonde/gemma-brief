@@ -7,7 +7,7 @@ from podcastbrief.briefing.schemas import EpisodeStructure, Quote
 log = logging.getLogger(__name__)
 
 
-SYSTEM_EXTRACT = """You are a senior editor producing morning-brief source material from podcast transcripts.
+SYSTEM_EXTRACT = """You are a senior editor producing morning-brief source material from transcripts.
 
 Your job in this pass: extract a RICH, OVER-INCLUSIVE structured representation. Pass 2 will select and sharpen.
 
@@ -16,40 +16,14 @@ Rules:
 - Attribute speaker accurately. If you cannot tell, use "Host" or "Guest" with role accordingly.
 - Use the [MM:SS] timestamps in the transcript to populate `timestamp` for each quote.
 - Extract 8-12 candidate_quotes. Score each on impact (1-10): 10 = most newsworthy, distinctive, quotable.
-- For by_the_numbers, only include figures actually stated in the transcript (numbers, percentages, dates, dollar amounts).
-- For resources_mentioned, capture every book/paper/tool/person/company/article cited.
+- For by_the_numbers, only include figures actually stated in the transcript (numbers, percentages, dates, dollar amounts, study sizes, test scores — anything quantified).
+- For resources_mentioned, capture every book, paper, tool, person, company, study, or article cited.
 - Be concrete. No filler, no editorializing.
 
-ENRICHMENT IDENTIFIERS — return standardized symbols, NOT natural language:
+named_entities: People, events, organizations, places, movements, or concepts worth a Wikipedia
+lookup. Plain names only — e.g. "CRISPR", "Ada Lovelace", "Stoicism", "Apollo program", "GPT-4". Max 8.
 
-market_entities: Yahoo Finance-compatible tickers for any stocks, ETFs, indices,
-crypto, or forex mentioned. Examples:
-  S&P 500 -> "^GSPC" or "SPY"
-  Nasdaq 100 -> "^NDX" or "QQQ"
-  10-year Treasury yield -> "^TNX"
-  Apple -> "AAPL"
-  Bitcoin -> "BTC-USD"
-  Tesla -> "TSLA"
-Use exactly the Yahoo symbol; do not invent.
-
-macro_indicators: FRED series IDs for any macroeconomic concept discussed.
-Examples:
-  CPI / inflation -> "CPIAUCSL"
-  Unemployment rate -> "UNRATE"
-  10-year Treasury rate -> "DGS10"
-  Fed funds rate -> "FEDFUNDS"
-  Real GDP -> "GDPC1"
-  Nominal GDP -> "GDP"
-  Industrial production -> "INDPRO"
-  Retail sales -> "RSAFS"
-  M2 money supply -> "M2SL"
-Skip if the episode is not macro-relevant. Do not invent IDs.
-
-named_entities: People, events, companies, places, or concepts worth a Wikipedia
-lookup. Plain names: "Federal Reserve", "Cathie Wood", "2008 financial crisis",
-"index fund", "S&P 500". Max 8.
-
-socratic_hooks: Exactly 3 questions the host raises but never fully resolves in
+socratic_hooks: Exactly 3 questions the speaker raises but never fully resolves in
 the episode. These are the open threads — not rhetorical, genuinely unresolved.
 """
 
@@ -103,7 +77,7 @@ def language_directive(lang_code: str) -> str:
 # back instead of producing an instance (returns {"$defs": ..., "title":
 # "EpisodeStructure"}). Showing one filled-in shape stops that drift cold —
 # same trick that fixed Pass 2.
-EPISODE_STRUCTURE_EXAMPLE = """{"tldr":"One-sentence summary of the episode.","thesis":"The central argument the host is making, in <=40 words.","why_it_matters":["First bullet, <=25 words.","Second bullet.","Third bullet."],"candidate_quotes":[{"text":"verbatim quote from the transcript","speaker":"Host Name","role":"host","timestamp":"24:18","context":"why this quote matters","impact_score":9},{"text":"another verbatim quote","speaker":"Guest Name","role":"guest","timestamp":"41:02","context":"why this matters","impact_score":8},{"text":"third quote","speaker":"Host","role":"host","timestamp":"58:47","context":"why","impact_score":7}],"by_the_numbers":[{"stat":"$42B","label":"market size","source":"speaker","why_relevant":"why this number matters"}],"hosts":["Wilfred Frost"],"guests":["Dan Niles"],"resources_mentioned":[{"name":"S&P 500","kind":"other","note":"benchmark"}],"predictions":["Forward-looking claim from the host."],"counterpoints":["Tension or counter-argument raised."],"action_items":["What a listener could do."],"topics":["ai","markets","macro"],"go_deeper":["search term 1","search term 2"],"market_entities":["SPY","^GSPC","NVDA"],"macro_indicators":["CPIAUCSL","DGS10"],"named_entities":["Federal Reserve","Dan Niles"],"socratic_hooks":["A question the host raises but does not answer.","Another open question.","A third unresolved question."]}"""
+EPISODE_STRUCTURE_EXAMPLE = """{"tldr":"One-sentence summary of the episode.","thesis":"The central argument the host is making, in <=40 words.","why_it_matters":["First bullet, <=25 words.","Second bullet.","Third bullet."],"candidate_quotes":[{"text":"verbatim quote from the transcript","speaker":"Host Name","role":"host","timestamp":"24:18","context":"why this quote matters","impact_score":9},{"text":"another verbatim quote","speaker":"Guest Name","role":"guest","timestamp":"41:02","context":"why this matters","impact_score":8},{"text":"third quote","speaker":"Host","role":"host","timestamp":"58:47","context":"why","impact_score":7}],"by_the_numbers":[{"stat":"42%","label":"of respondents agreed","source":"2024 Pew study","why_relevant":"scale of the finding"}],"hosts":["Lex Fridman"],"guests":["Andrej Karpathy"],"resources_mentioned":[{"name":"Attention Is All You Need","kind":"paper","note":"foundational transformer paper"},{"name":"PyTorch","kind":"tool","note":"deep learning framework"}],"predictions":["Forward-looking claim from the host."],"counterpoints":["Tension or counter-argument raised."],"action_items":["What a listener could do."],"topics":["ai","education","research"],"go_deeper":["search term 1","search term 2"],"named_entities":["Andrej Karpathy","OpenAI","backpropagation"],"socratic_hooks":["A question the host raises but does not answer.","Another open question.","A third unresolved question."]}"""
 
 
 def _minimal_fallback_structure(

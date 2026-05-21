@@ -1,20 +1,13 @@
-"""Pass 3 — grounded multimodal annotations.
+"""Pass 3 — grounded annotations.
 
-This is the showcase agentic-reasoning step. After Pass 1 and Pass 2 have built
-the structured brief, and after the enrichers have pulled real-world data
-(Yahoo price charts, FRED macro series, Wikipedia summaries, contemporaneous
-RSS headlines), Gemma 4 makes ONE call that *compares* what the episode CLAIMED
-to what the data ACTUALLY SHOWS.
+After Pass 1 and Pass 2 have built the structured brief, and after the enrichers
+have pulled real-world data (Wikipedia summaries, contemporaneous RSS headlines),
+Gemma compares what the episode CLAIMED to what contemporaneous reporting SHOWS.
 
-Gemma 4 is not just retrieving here — it is reasoning across modalities (price
-data, macro series, news, the host's own framing) to produce a one-sentence
-ground-truth check per artifact. That's the multimodal + agentic story for the
-judges, and it's the reason the four enrichers exist.
-
-Each artifact gets exactly one annotation:
-- Yahoo chart: "Compare what the host predicted/claimed about this asset to what the chart actually shows over the discussed window."
-- FRED series: "Does the episode's claim about this indicator align with the real series?"
-- RSS article: "Do contemporaneous headlines support, contradict, or add nuance to the host's framing?"
+Each news article gets one annotation: does this headline support, complicate,
+or contradict the brief's framing? That's the grounding step — turning a passive
+transcript summary into a claim-checked brief that cites the world outside the
+episode itself.
 
 If the call fails or the model returns junk, annotations stay empty and the
 PDF still renders cleanly — the cards just won't have a grounding line.
@@ -32,30 +25,30 @@ log = logging.getLogger(__name__)
 
 
 class _Annotation(BaseModel):
-    key: str   # ticker / FRED id / news url
+    key: str    # article URL
     text: str = Field("", max_length=300)
 
 
 class _Grounding(BaseModel):
-    market: list[_Annotation] = Field(default_factory=list)
-    macro: list[_Annotation] = Field(default_factory=list)
     news: list[_Annotation] = Field(default_factory=list)
 
 
-_SYSTEM = """You are a senior research editor cross-checking a podcast episode against real-world data.
+_SYSTEM = """You are a senior research editor cross-checking a transcript brief against contemporaneous reporting.
 
 You receive:
-1. The episode's structured brief (claims, predictions, quotes).
-2. Real data: Yahoo Finance price charts (with current price + 30-day % change), FRED macro indicators (with latest value), recent news headlines (with date and snippet).
+1. The episode's structured brief (claims, predictions, key quotes).
+2. Recent news headlines and snippets from the same time window.
 
-For EACH artifact, write ONE sentence that compares what the host claimed/predicted to what the data shows. Be specific. Cite the figure. If the episode is silent on an artifact, say so briefly. If the data confirms the host, say that. If it contradicts or complicates, say that.
+For EACH news article, write ONE sentence that connects it to the brief: does the headline
+support the speaker's framing, add nuance, or contradict it? Be specific — cite the article's
+angle and the brief's claim. If the article is unrelated to the brief, say so briefly.
 
-Length: 1 sentence per artifact, max 30 words. No hedging filler. No "it is important to note".
+Length: 1 sentence per article, max 30 words. No hedging filler.
 
 Return ONLY valid JSON matching the requested shape."""
 
 
-_EXAMPLE = """{"market":[{"key":"SPY","text":"Host predicted further downside, but SPY is up 4.2% over the discussed 30-day window — the call has not aged well."}],"macro":[{"key":"CPIAUCSL","text":"Episode framed CPI as 'stubbornly high', and the latest 318.7 reading does sit at a 12-month plateau."}],"news":[{"key":"https://example.com/x","text":"Reuters headline from the same week supports the host's claim that retail momentum is slowing."}]}"""
+_EXAMPLE = """{"news":[{"key":"https://example.com/article","text":"Reuters headline from the same week directly corroborates the guest's claim that chip shortages are easing in automotive supply chains."}]}"""
 
 
 def _shape_input(brief: BriefFinal, e: EnrichmentResult) -> str:
@@ -64,28 +57,10 @@ def _shape_input(brief: BriefFinal, e: EnrichmentResult) -> str:
             "headline": brief.headline,
             "tldr": brief.tldr,
             "thesis": brief.thesis,
-            "why_it_matters": brief.why_it_matters,
             "predictions": brief.predictions,
             "by_the_numbers": [d.model_dump() for d in brief.by_the_numbers],
             "pull_quotes": [q.model_dump() for q in brief.pull_quotes],
         },
-        "market": [
-            {
-                "key": m.ticker,
-                "current_price": m.current_price,
-                "pct_change_30d": m.pct_change_30d,
-            }
-            for m in e.market
-        ],
-        "macro": [
-            {
-                "key": s.series_id,
-                "name": s.name,
-                "latest_value": s.latest_value,
-                "latest_date": s.latest_date,
-            }
-            for s in e.macro
-        ],
         "news": [
             {
                 "key": a.url,
@@ -103,9 +78,9 @@ def _shape_input(brief: BriefFinal, e: EnrichmentResult) -> str:
 def ground_enrichment(
     *, llm: LLM, brief: BriefFinal, enrichment: EnrichmentResult
 ) -> EnrichmentResult:
-    """Run Pass 3. Mutates `enrichment` in place to add `.annotation` strings,
-    returns it for chaining."""
-    if enrichment.is_empty():
+    """Run Pass 3. Mutates `enrichment` in place to add `.annotation` strings on
+    news articles, returns it for chaining."""
+    if not enrichment.news:
         return enrichment
 
     user_msg = _shape_input(brief, enrichment)
@@ -122,15 +97,7 @@ def ground_enrichment(
         log.warning("Pass 3 grounding call failed: %s", e)
         return enrichment
 
-    # Map annotations back onto the enrichment objects by key.
-    by_ticker = {a.key: a.text for a in result.market}
-    by_series = {a.key: a.text for a in result.macro}
     by_url = {a.key: a.text for a in result.news}
-
-    for m in enrichment.market:
-        m.annotation = by_ticker.get(m.ticker, "")
-    for s in enrichment.macro:
-        s.annotation = by_series.get(s.series_id, "")
     for n in enrichment.news:
         n.annotation = by_url.get(n.url, "")
 

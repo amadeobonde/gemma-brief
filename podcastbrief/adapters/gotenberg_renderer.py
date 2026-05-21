@@ -72,26 +72,6 @@ class GotenbergRenderer:
         )
         hero_data_uri = _to_data_uri(brief.artwork_png) if brief.artwork_png else None
         enrichment = brief.enrichment
-        # Convert chart PNG bytes to data URIs so the HTML is self-contained.
-        market = []
-        for m in (getattr(enrichment, "market", None) or []):
-            market.append({
-                "ticker": m.ticker,
-                "current_price": m.current_price,
-                "pct_change_30d": m.pct_change_30d,
-                "chart_uri": _to_data_uri(m.chart_png) if m.chart_png else None,
-                "annotation": m.annotation,
-            })
-        macro = []
-        for s in (getattr(enrichment, "macro", None) or []):
-            macro.append({
-                "series_id": s.series_id,
-                "name": s.name,
-                "latest_value": s.latest_value,
-                "latest_date": s.latest_date,
-                "chart_uri": _to_data_uri(s.chart_png) if s.chart_png else None,
-                "annotation": s.annotation,
-            })
         wiki = list(getattr(enrichment, "wiki", None) or [])
         news = list(getattr(enrichment, "news", None) or [])
         html_str = self._template.render(
@@ -101,8 +81,6 @@ class GotenbergRenderer:
             accent=accent,
             hero_data_uri=hero_data_uri,
             language=getattr(brief.brief, "language", "en"),
-            market=market,
-            macro=macro,
             wiki=wiki,
             news=news,
         )

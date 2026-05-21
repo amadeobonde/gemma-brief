@@ -28,15 +28,15 @@ YouTube playlists  ──►  yt-dlp (new videos, last 24 h)
                                ▼
           ┌──── Gemma Pass 2 ───────────────────────────────────┐
           │  Sharpen: 5 focused follow-up calls — select best    │
-          │  quotes, tighten bullets, extract market tickers,    │
-          │  FRED macro IDs, Wikipedia terms                     │
+          │  quotes, tighten bullets, extract named entities,    │
+          │  key stats, Wikipedia terms                          │
           └──────────────────────────────────────────────────────┘
                                │
                                ▼
           ┌──── Gemma Pass 3  (grounding) ─────────────────────┐
-          │  Cross-reference enrichers: Yahoo Finance charts,   │
-          │  FRED macro sparklines, Wikipedia summaries, live   │
-          │  RSS headlines — one grounding sentence per claim   │
+          │  Cross-reference enrichers: Wikipedia summaries,    │
+          │  live RSS headlines — one grounding sentence per    │
+          │  claim against contemporaneous reporting            │
           └──────────────────────────────────────────────────────┘
                                │
                       ┌────────┴────────┐
@@ -251,8 +251,6 @@ Any public YouTube playlist works:
 | `/numbers` | All figures and stats from today's brief |
 | `/contradictions` | Where today's content contradicts older briefs |
 | `/connect <topic>` | Cross-video synthesis: today vs vault history |
-| `/chart <ticker>` | Live Yahoo price chart + Gemma annotation (native tool calling) |
-| `/macro <FRED_id>` | FRED sparkline, e.g. `/macro CPIAUCSL` |
 | `/gaps` | Open questions hosts raised but never resolved |
 | `/topics` | Recurring themes this week and month |
 | `/news <topic>` | Top RSS headlines for a topic, past 7 days |
@@ -275,17 +273,15 @@ Each brief is an image-forward PDF with:
 - **Predictions + Counterpoints** — what was claimed, what pushes back
 - **Resources** — books, papers, tools, people named in the video
 - **Action items** — things you could actually do
-- **Market snapshot** — Yahoo Finance 30-day charts for mentioned tickers
-- **Macro context** — FRED sparklines for named economic indicators
 - **Reality check** — contemporaneous RSS headlines grounded against the brief's claims
+- **Wikipedia cards** — short summaries for key people, concepts, and organisations named
 - **Similar content** — YouTube search results for related topics
 
 ---
 
 ## Highlights
 
-- **Three-pass agentic pipeline.** Pass 1 over-extracts (8-12 candidate quotes with self-rated impact scores, standardized identifiers for Yahoo/FRED/Wikipedia, three Socratic questions the host never resolves). Pass 2 sharpens across five focused sub-calls. Pass 3 grounds every claim against real-world data fetched live.
-- **Native Gemma tool calling.** The `/chart` command uses Ollama's tool-calling API directly — the model decides to call `get_price_chart`, we resolve it via Yahoo Finance, a second Gemma call annotates the result. See [`podcastbrief/bot/chart_tool.py`](podcastbrief/bot/chart_tool.py).
+- **Three-pass agentic pipeline.** Pass 1 over-extracts (8–12 candidate quotes with self-rated impact scores, Wikipedia-ready named entities, three Socratic questions the host never resolves). Pass 2 sharpens across five focused sub-calls. Pass 3 grounds every claim against Wikipedia summaries and contemporaneous RSS headlines.
 - **Full Gemma suite.** Runs any `gemma2:*`, `gemma3:*`, or `gemma4:*` model. Context windows auto-tune per family (8K for Gemma 2, 32K for Gemma 3/4). Vision input (thumbnail captioning) activates automatically on Gemma 3/4, gracefully disabled on Gemma 2.
 - **Quotes carry timestamps.** Whisper returns segment-level timestamps; the model maps each chosen quote to `MM:SS` so you can jump back to the source.
 - **Voice in, voice out.** Send a Telegram voice message → Whisper STT → RAG → TTS (macOS `say` / Linux `espeak-ng` / Windows SAPI) → ffmpeg Opus encode → voice bubble back in Telegram.
@@ -413,11 +409,11 @@ podcastbrief/
   ports/       9 Protocols — implement to plug in your own services
   adapters/    YouTube · Whisper · Ollama/Gemma · Gotenberg · Telegram
                iTunes artwork · RSS · filesystem notes · YouTube recommender
-               Yahoo/FRED/Wikipedia/RSS enrichers
+               Wikipedia + RSS news enrichers
   briefing/    schemas · extractor (pass 1) · interrogator (pass 2)
                grounder (pass 3) · Jinja2 HTML template + CSS
-  bot/         RAG (BM25, no vector DB) · voice · debate · chart tool
-               17 Telegram command handlers
+  bot/         RAG (BM25, no vector DB) · voice · debate
+               Telegram command handlers
   jobs/        daily · cleanup · bot · setup wizard · maintenance
   cli.py       Click entry point
 docker-compose.yml   faster-whisper + Gotenberg

@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     tts_rate: int = 185
 
     # Enrichment.
-    fred_api_key: str = ""
     rss_news_feeds: str = (
         "https://feeds.reuters.com/reuters/businessNews,"
         "https://www.ft.com/rss/home,"

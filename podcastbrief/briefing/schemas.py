@@ -149,18 +149,7 @@ class EpisodeStructure(BaseModel):
     go_deeper: list[str] = Field(default_factory=list)
     visual_caption: str | None = None
 
-    # ---- enrichment hooks (drive Yahoo / FRED / Wikipedia / RSS lookups) ----
-    # Standardized identifiers, NOT natural language. The extractor prompt
-    # explicitly asks the model for these formats so downstream adapters can
-    # call APIs without a normalization step.
-    market_entities: list[str] = Field(
-        default_factory=list,
-        description="Yahoo Finance-compatible symbols mentioned in the episode: stocks (e.g. 'AAPL'), ETFs ('SPY'), indices ('^GSPC', '^TNX'), crypto ('BTC-USD'), forex ('EURUSD=X').",
-    )
-    macro_indicators: list[str] = Field(
-        default_factory=list,
-        description="FRED series IDs for macroeconomic concepts the episode discusses (e.g. 'CPIAUCSL' for CPI, 'DGS10' for 10Y yield, 'UNRATE' for unemployment, 'GDP' for GDP).",
-    )
+    # ---- enrichment hooks (drive Wikipedia / RSS lookups) ----
     named_entities: list[str] = Field(
         default_factory=list,
         description="People, events, companies, places, or concepts notable enough for a Wikipedia lookup. Plain names, not URLs.",
@@ -189,8 +178,6 @@ class BriefFinal(BaseModel):
     topics: list[str] = Field(default_factory=list)
     go_deeper: list[str] = Field(default_factory=list)
     visual_caption: str | None = None
-    market_entities: list[str] = Field(default_factory=list)
-    macro_indicators: list[str] = Field(default_factory=list)
     named_entities: list[str] = Field(default_factory=list)
     socratic_hooks: list[str] = Field(default_factory=list)
     language: str = Field(default="en", description="ISO 639-1 language code from Whisper transcript detection.")
