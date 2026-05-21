@@ -127,7 +127,7 @@ def run_bot() -> None:
         try:
             buf = _io.BytesIO(result.ogg_bytes)
             buf.name = "debate.ogg"
-            await msg.reply_voice(voice=buf, caption=f"🎙️ Debate: {topic}"[:1024])
+            await msg.reply_voice(voice=buf, caption=f"🎙️ Debate: {topic}"[:1024], write_timeout=300, read_timeout=300)
         except Exception as e:
             log.exception("Telegram voice send failed: %s", e)
             await msg.reply_text(f"Built the voice note but couldn't send it: {e}")
@@ -185,7 +185,7 @@ def run_bot() -> None:
                 buf = _io.BytesIO(result.ogg_bytes)
                 buf.name = f"explain_{result.episode_slug}.ogg"
                 caption = f"[[{result.episode_slug}]]  {start_ts} → {end_ts}"[:1024]
-                await msg.reply_voice(voice=buf, caption=caption)
+                await msg.reply_voice(voice=buf, caption=caption, write_timeout=300, read_timeout=300)
             except Exception as e:
                 log.exception("/explain voice send failed: %s", e)
 
@@ -333,9 +333,9 @@ def run_bot() -> None:
         buf.name = fname
         try:
             if mime == "audio/ogg":
-                await msg.reply_voice(voice=buf)
+                await msg.reply_voice(voice=buf, write_timeout=300, read_timeout=300)
             else:
-                await msg.reply_audio(audio=buf, title="Reply")
+                await msg.reply_audio(audio=buf, title="Reply", write_timeout=300, read_timeout=300)
         except Exception as e:
             log.exception("Telegram audio send failed: %s", e)
             await msg.reply_text(answer)
