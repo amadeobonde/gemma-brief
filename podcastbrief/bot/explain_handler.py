@@ -63,14 +63,17 @@ def _expand_passage(
     sidecar: dict,
     *,
     max_gap_seconds: float = 15.0,
-    max_duration_seconds: float = 120.0,
+    max_backward_seconds: float = 20.0,
+    max_forward_seconds: float = 90.0,
 ) -> tuple[float, float, str]:
-    """Expand from `best` outward to capture the full surrounding discussion.
+    """Expand from `best` to capture the full discussion of the matched topic.
 
-    Walks backwards and forwards through the sidecar's segment list, including
-    each neighbour as long as:
-      - the gap to the previous/next segment is ≤ max_gap_seconds, AND
-      - accumulated duration is ≤ max_duration_seconds.
+    The matched segment is kept near the START of the passage — we pull only a
+    short lead-in (≤ max_backward_seconds) so the keyword isn't buried at the
+    end, then extend forward (≤ max_forward_seconds) to capture what the host
+    says about it.
+
+    Each direction also stops at any gap > max_gap_seconds (topic change).
 
     Returns (start_seconds, end_seconds, verbatim_text).
     """
@@ -82,34 +85,28 @@ def _expand_passage(
     # Guard against stale index (can happen if sidecar was rebuilt).
     idx = max(0, min(idx, len(segments) - 1))
     included: list[int] = [idx]
+    match_start = float(segments[idx].get("start") or best.start_seconds)
 
-    # ── expand backwards ──
+    # ── small backward lead-in (context only) ──
     for j in range(idx - 1, -1, -1):
         seg_end = float(segments[j].get("end") or 0.0)
         next_start = float(segments[j + 1].get("start") or 0.0)
         if next_start - seg_end > max_gap_seconds:
             break
-        included.insert(0, j)
-        total = (
-            float(segments[included[-1]].get("end") or 0.0)
-            - float(segments[included[0]].get("start") or 0.0)
-        )
-        if total >= max_duration_seconds:
+        # Stop if we'd pull too far before the match.
+        if match_start - float(segments[j].get("start") or 0.0) > max_backward_seconds:
             break
+        included.insert(0, j)
 
-    # ── expand forwards ──
+    # ── forward expansion — this is the main body of the passage ──
     for j in range(idx + 1, len(segments)):
         seg_start = float(segments[j].get("start") or 0.0)
         prev_end = float(segments[j - 1].get("end") or 0.0)
         if seg_start - prev_end > max_gap_seconds:
             break
-        included.append(j)
-        total = (
-            float(segments[included[-1]].get("end") or 0.0)
-            - float(segments[included[0]].get("start") or 0.0)
-        )
-        if total >= max_duration_seconds:
+        if seg_start - match_start > max_forward_seconds:
             break
+        included.append(j)
 
     start = float(segments[included[0]].get("start") or 0.0)
     end = float(segments[included[-1]].get("end") or 0.0)
