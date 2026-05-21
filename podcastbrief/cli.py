@@ -139,16 +139,89 @@ def serve_cmd() -> None:
     logging.basicConfig(level=getattr(logging, s.log_level.upper(), logging.INFO))
     _startup_checks()
 
+    hour, minute = _parse_time(s.daily_brief_time)
     sched = BackgroundScheduler()
-    sched.add_job(run_daily,  CronTrigger(hour=2, minute=0), id="daily")
-    sched.add_job(run_cleanup, CronTrigger(day=1, hour=3, minute=0), id="cleanup")
+    sched.add_job(run_daily,   CronTrigger(hour=hour, minute=minute), id="daily")
+    sched.add_job(run_cleanup, CronTrigger(day=1, hour=3, minute=0),  id="cleanup")
     sched.start()
-    click.echo(click.style("  Scheduler started. Running Telegram bot in foreground.", fg="green"))
+    click.echo(click.style(
+        f"  Scheduler started. Daily brief at {hour:02d}:{minute:02d} (server local time).",
+        fg="green",
+    ))
     click.echo(click.style("  Ctrl+C to stop.\n", fg="bright_black"))
     try:
         run_bot()
     finally:
         sched.shutdown()
+
+
+# ── schedule ───────────────────────────────────────────────────────────────────
+
+@cli.command("schedule", context_settings=CONTEXT_SETTINGS)
+@click.argument("time", required=False, default="", metavar="HH:MM")
+@click.option("--env-path", type=click.Path(path_type=Path), default=Path(".env"), hidden=True)
+def schedule_cmd(time: str, env_path: Path) -> None:
+    """Show or change the daily brief time.
+
+    \b
+    Called with no argument, shows the current schedule.
+    Called with HH:MM, updates the schedule in .env.
+
+    \b
+    Examples:
+      gemma-brief schedule             show current time
+      gemma-brief schedule 08:00       set to 08:00 every morning
+      gemma-brief schedule 18:30       set to 18:30 every evening
+      gemma-brief schedule 00:00       midnight
+
+    \b
+    The change takes effect on the next  gemma-brief serve  start.
+    If serve is already running, restart it:
+      macOS:  launchctl kickstart -k gui/$UID/com.gemma-brief.serve
+      Linux:  systemctl --user restart gemma-brief
+      manual: Ctrl+C, then  gemma-brief serve
+    """
+    from podcastbrief.jobs.add_source import _read_env, _write_env  # reuse helpers
+
+    env_path = env_path.resolve()
+    s = load_settings()
+
+    if not time:
+        # Show current schedule
+        h, m = _parse_time(s.daily_brief_time)
+        _head("Daily Brief Schedule")
+        _rule()
+        _info(f"Daily brief:  {click.style(f'{h:02d}:{m:02d}', bold=True)}  (server local time)")
+        _info(f"Cleanup job:  {click.style('03:00', bold=True)}  on the 1st of each month")
+        click.echo()
+        _info("Change with:  gemma-brief schedule HH:MM")
+        click.echo()
+        return
+
+    # Validate and set
+    time = time.strip()
+    try:
+        h, m = _parse_time(time)
+    except SystemExit:
+        raise click.BadParameter(
+            f"{time!r} is not a valid time — use HH:MM (e.g. 08:00 or 18:30).",
+            param_hint="TIME",
+        )
+
+    canonical = f"{h:02d}:{m:02d}"
+    env = _read_env(env_path)
+    env["DAILY_BRIEF_TIME"] = canonical
+    _write_env(env_path, {"DAILY_BRIEF_TIME": canonical})
+
+    _ok(f"Daily brief time set to  {click.style(canonical, bold=True)}")
+    _info("Restart gemma-brief serve for the change to take effect.")
+
+    system = platform.system()
+    if system == "Darwin":
+        _info("  launchctl kickstart -k gui/$UID/com.gemma-brief.serve")
+    elif system == "Linux":
+        _info("  systemctl --user restart gemma-brief")
+    click.echo()
 
 
 # ── run ────────────────────────────────────────────────────────────────────────
@@ -904,6 +977,24 @@ def add_compat(playlist_url: str, rss_url: str, env_path: Path) -> None:
 
 
 # ── internal helpers ──────────────────────────────────────────────────────────
+
+def _parse_time(value: str) -> tuple[int, int]:
+    """Parse 'HH:MM' into (hour, minute). Raises SystemExit on bad input."""
+    value = value.strip()
+    parts = value.split(":")
+    if len(parts) != 2:
+        _err(f"Invalid time format {value!r} — expected HH:MM (e.g. 08:00)")
+        raise SystemExit(1)
+    try:
+        h, m = int(parts[0]), int(parts[1])
+    except ValueError:
+        _err(f"Invalid time {value!r} — hours and minutes must be integers")
+        raise SystemExit(1)
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        _err(f"Invalid time {value!r} — hour must be 0-23, minute 0-59")
+        raise SystemExit(1)
+    return h, m
+
 
 def _startup_checks() -> None:
     """Warn about missing optional deps needed by /debate."""

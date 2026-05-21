@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     clip_silence_between_ms: int = 800
     clip_target_dbfs: float = -18.0
 
+    # Scheduler — time the daily brief job fires (24-h HH:MM, server local time).
+    # Change with:  gemma-brief schedule HH:MM
+    daily_brief_time: str = "02:00"
+
     log_level: str = "INFO"
 
     @property

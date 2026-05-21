@@ -290,6 +290,11 @@ gemma-brief run                             # pull new videos + generate briefs 
 gemma-brief run --hours 72                  # extend look-back window to 72 h
 gemma-brief run --dry-run                   # full pipeline, no Telegram send
 
+# Schedule
+gemma-brief schedule                        # show current brief time
+gemma-brief schedule 08:00                  # set daily brief to 08:00
+gemma-brief schedule 18:30                  # or any HH:MM (server local time)
+
 # Observability
 gemma-brief status                          # health dashboard
 gemma-brief doctor                          # diagnose + print exact fix commands
