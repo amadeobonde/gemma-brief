@@ -6,7 +6,25 @@ Point it at any YouTube playlist — news channels, debates, lectures, podcasts,
 Everything runs **fully on-device**. No OpenAI. No cloud API. No data leaving your machine.  
 Works on **macOS · Linux · Windows (WSL 2)** with the **full Gemma 2 / 3 / 4 suite**.
 
-Built for the [DEV Gemma 4 Challenge](https://dev.to/challenges/google-gemma-2026-05-06).
+Built for the [DEV Gemma 4 Challenge](https://dev.to/challenges/google-gemma-2026-05-06) · [Read the article](https://dev.to/amadeobonde/that-quote-i-half-remember-at-2am-i-can-find-it-now-2blo)
+
+---
+
+## Demo
+
+[![gemma-brief walkthrough](https://img.youtube.com/vi/xdTFwgudJ70/maxresdefault.jpg)](https://youtu.be/xdTFwgudJ70)
+
+---
+
+## Sample output
+
+Three real briefs generated overnight from three real channels — zero manual input.
+
+| Channel | Brief |
+|---|---|
+| Fireship | [View PDF](https://drive.google.com/file/d/1RNr8IF-dTWnHNPWlxjbqcO6xW2aZciby/view?usp=drive_link) |
+| Two Minute Papers | [View PDF](https://drive.google.com/file/d/1_gvytwFpka7k8EUwpRTNr5IpmQJ5hM3Y/view?usp=drive_link) |
+| Google I/O | [View PDF](https://drive.google.com/file/d/1Y9GdJweBh8kbA6tWmz3oE5GSSztlwoMT/view?usp=drive_link) |
 
 ---
 
